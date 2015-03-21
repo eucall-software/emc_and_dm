@@ -1,0 +1,4 @@
+. [sync_to_bastion] Add compile_c_files to DESY repo. 
+. [make_diagnostic_figures.py] Simplify existing viewRecon functions into io.py
+or show.py and call these functions instead.
+. [orient>>>.h5]
