@@ -1,0 +1,1 @@
+rsync -avP -e "ssh -A duaneloh@bastion.desy.de ssh -A duaneloh@exflst304.desy.de" runEMC.py make_diagnostic_figures.py supp_py_modules checkPhotons.awk EMC.c object_recon.c quaternions start_orient duplicate_source compile_c_files :/data/S2E/modules/orient/

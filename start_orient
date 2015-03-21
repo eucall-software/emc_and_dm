@@ -1,0 +1,6 @@
+#!/bin/bash
+SRC=/mnt/cbis/images/duaneloh/S2E/Src/
+TMP=/mnt/cbis/images/duaneloh/S2E/tmp/kahuna_9fs/
+INPUT=/mnt/cbis/images/duaneloh/S2E/sim_5kev_9fs_35_2NIP_EMC/diffr/ 
+
+nohup python2.7 runEMC.py -s $SRC -T $TMP -i $INPUT &

@@ -1,0 +1,3 @@
+#!/bin/bash
+gcc -O3 EMC.c -lm -Wno-unused-result -o EMC -fopenmp
+gcc -O3 object_recon.c -lm -Wno-unused-result -lfftw3 -o object_recon
