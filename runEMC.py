@@ -41,31 +41,38 @@ currTimeStamp = "%04d_%02d_%02d_%02d_%02d_%02d"%(ct.tm_year, ct.tm_mon, ct.tm_md
 parser.add_option("-t", "--timeStamp", action="store", type="string", dest="timeStamp", help="time stamp to use for output", metavar="", default=currTimeStamp)
 
 (op, args) = parser.parse_args()
+runLogFile = os.path.join(op.tmpOutDir, op.timeStamp + ".log")
 
-def print_to_log(log_file, msg):
+################################################################################
+# Convenience functions for this script
+################################################################################
+
+def print_to_log(msg, log_file=runLogFile):
     fp = open(log_file, "a")
-    fp.write(msg)
+    t_msg = time.asctime() + ":: " + msg
+    fp.write(t_msg)
     fp.write("\n")
     fp.close()
 
-runLogFile = os.path.join(op.tmpOutDir, op.timeStamp + ".log")
+def create_directory(dir_name, log_file=runLogFile, err_msg=""):
+    if os.path.exists(dir_name):
+        print_to_log(dir_name + " exists! " + err_msg, log_file=log_file)
+    else:
+        print_to_log("Creating " + dir_name, log_file=log_file)
+        os.makedirs(dir_name)
 
 ###############################################################
 # Convert photons into sparse format, split into multiple files
 # Create detector.dat, creation of beamstop
 # Test data is in: /data/S2E/data/simulation_test/diffr
 ###############################################################
-# Create makeMonster-like object to store essential variables, also to create test module.
-# make default beamstop
-# estimate particle size?
-# make and write detector.dat
-# make and write photons.dat
-# needs functions that check for existing detector.dat and photons.dat, and asks if we want to overwrite them
 
 
 class EMCCaseGenerator(object):
-    def __init__(self):
-
+    def __init__(self, runLog=runLogFile):
+        """
+        Wrapper for initializing the essential data for EMC recon.
+        """
         #Initialize essential parameters
         self.z = 0
         self.sigma = 0
@@ -74,32 +81,21 @@ class EMCCaseGenerator(object):
         self.numPixToEdge = 0
         self.detectorDist = 0
         self.maxScatteringAng = 0
-        self.detector = []
-        self.beamstop = []
-        self.intensities = []
+        self.detector = None
+        self.beamstop = None
+        self.intensities = None
+        self.runLog = runLog
 
         #Initialize non-essential parameters
         self.density = []
         self.support = []
         self.supportPositions = []
 
-    def writeSupportToFile(self, filename="support.dat"):
-        header = "%d\t%d\n" % (self.qmax, len(self.supportPositions))
-        f = open(filename, 'w')
-        f.write(header)
-        for i in self.supportPositions:
-            text = "%d\t%d\t%d\n" % (i[0], i[1], i[2])
-            f.write(text)
-        f.close()
-
-    def writeDensityToFile(self, filename="density.dat"):
-        f = open(filename, "w")
-        self.density.tofile(f, sep="\t")
-        f.close()
-
     def writeDetectorToFile(self, filename="detector.dat"):
-        msg = time.asctime() + ":: " +"Writing detector to %s"%(filename)
-        print_to_log(runLogFile, msg)
+        """
+        Writes computed detector and beamstop coordinates to output (default:detector.dat)
+        """
+        print_to_log("Writing detector to %s"%(filename), log_file=self.runLog)
         header = "%d\t%d\t%d\n" % (N.ceil(self.qmax), len(self.detector), len(self.beamstop))
         f = open(filename, 'w')
         f.write(header)
@@ -121,6 +117,164 @@ class EMCCaseGenerator(object):
         vDenom = N.sqrt(1 + (ii*ii + jj*jj)/(zL*zL))
         return v/vDenom - N.array([0,0,zL])
 
+    def readGeomFromPhotonData(self, fn):
+        """
+        Try to extract detector geometry from S2E photon files
+
+        """
+        print_to_log("Reading geometry file using file %s"%fn, log_file=self.runLog)
+        f = h5py.File(fn, 'r')
+        self.detectorDist = (f["params/geom/detectorDist"].value)
+        #We expect the detector to always be square of length 2*self.numPixToEdge+1
+        (r,c) = f["data/data"].shape
+        if (r == c and (r%2==1)):
+            self.numPixToEdge = (r-1)/2
+        else:
+            msg = "Your array has shape %d %d, Only odd-length square detectors allowed now. Quitting"%(r,c)
+            print_to_log(msg, log_file=self.runLog)
+            sys.exit()
+        pixH = (f['params/geom/pixelHeight'].value)
+        pixW = (f['params/geom/pixelWidth'].value)
+        if(pixH == pixW):
+            self.pixSize = pixH
+        maxScattAng = N.arctan(self.numPixToEdge * self.pixSize / self.detectorDist)
+        zL = self.detectorDist / self.pixSize
+        self.qmax = int(2 * self.numPixToEdge * N.sin(0.5*maxScattAng) / N.tan(maxScattAng))
+
+        #Write detector to file
+        [x,y] = N.mgrid[-self.numPixToEdge:self.numPixToEdge+1, -self.numPixToEdge:self.numPixToEdge+1]
+        tempDetectorPix = [self.placePixel(i,j,zL) for i,j in zip(x.flat, y.flat)]
+        qualifiedDetectorPix = [i for i in tempDetectorPix if (N.sqrt(i[0]*i[0] +i[1]*i[1] + i[2]*i[2])>self.qmin and N.sqrt(i[0]*i[0] +i[1]*i[1] + i[2]*i[2])<self.qmax and N.abs(i[0])>3)]
+        self.detector = N.array(qualifiedDetectorPix)
+
+        # qmin defaults to 2 pixel beamstop
+        # qmin = 1.4302966531242025 * (self.qmax / particleRadiusInPix)
+        self.qmin = 2
+        fQmin = N.floor(self.qmin)
+        [x,y,z] = N.mgrid[-fQmin:fQmin+1, -fQmin:fQmin+1, -fQmin:fQmin+1]
+        self.beamstop = N.array([[xx,yy,zz] for xx,yy,zz in zip(x.flat, y.flat, z.flat) if N.sqrt(xx*xx + yy*yy + zz*zz)<=self.qmin])
+
+    def readGeomFromDetectorFile(self, fn="detector.dat"):
+        """
+        Read qx,qy,qz coordinates of detector and beamstop from detector.dat.
+        """
+        f = open(fn, "r")
+        line1 = [int(x) for x in f.readline().split("\t")]
+        self.qmax = int(line1[0])
+        self.qmin = 2
+
+        d = f.readlines()
+        dLoc = [[float(y) for y in x.split("\t")] for x in d]
+        self.detector = N.array(dLoc[:line1[1]])
+        self.beamstop = N.array(dLoc[line1[1]:])
+        f.close()
+        return
+
+    def writeSparsePhotonFile(self, fileList, outFN, outFNH5Avg):
+        """
+        Convert dense S2E file format to sparse EMC photons.dat format.
+        """
+        # Log: destination output to file
+        msg = time.asctime() + ":: " +"Writing diffr output to %s"%outFN
+        print_to_log(self.runLog, msg)
+
+        # Define in-plane detector x,y coordinates
+        [x,y] = N.mgrid[-self.numPixToEdge:self.numPixToEdge+1, -self.numPixToEdge:self.numPixToEdge+1]
+
+        # Compute qx,qy,qz positions of detector
+        zL = self.detectorDist / self.pixSize
+        tmpQ = N.array([self.placePixel(i,j,zL) for i,j in zip(x.flat, y.flat)])
+
+        # Enumerate qualified detector pixels with a running index, currPos
+        pos = -1 + 0*x.flatten()
+        currPos = 0
+        flatMask = 0.*pos
+        for p,v in enumerate(tmpQ):
+            if N.sqrt(v[0]*v[0] +v[1]*v[1] + v[2]*v[2])<self.qmax and N.sqrt(v[0]*v[0] +v[1]*v[1] + v[2]*v[2])>self.qmin and N.abs(v[0])>3:
+                    pos[p] = currPos
+                    flatMask[p] = 1.
+                    currPos += 1
+
+        # Compute mean photon count from the first 200 diffraction images
+        # (or total number of images, whichever is smaller)
+        numFilesToAvgForMeanCount = min([200, len(fileList)])
+        meanPhoton = 0.
+        totPhoton = 0.
+        for fn in fileList[:numFilesToAvgForMeanCount]:
+            f = h5py.File(fn, 'r')
+            meanPhoton += N.mean((f["data/data"].value).flatten())
+            totPhoton += N.sum((f["data/data"].value).flatten())
+            f.close()
+        meanPhoton /= 1.*numFilesToAvgForMeanCount
+        totPhoton /= 1.*numFilesToAvgForMeanCount
+
+        # Start stepping through diffraction images and writing them to sparse format
+        msg = time.asctime() + ":: " +"Average intensities: %lf"%(totPhoton)
+        print_to_log(self.runLog, msg)
+        outf = open(outFN, "w")
+        outf.write("%d %lf \n"%(len(fileList), meanPhoton))
+        mask = flatMask.reshape(2*self.numPixToEdge+1, -1)
+        avg = 0.*mask
+
+        msg = time.asctime() + ":: " +"Converting individual data frames to sparse format %s"%("."*20)
+        print_to_log(self.runLog, msg)
+
+        for n,fn in enumerate(fileList):
+            try:
+                f = h5py.File(fn, 'r')
+                v = f["data/data"].value
+                avg += v
+                temp = {"o":[], "m":[]}
+
+                for p,vv in zip(pos, v.flat):
+                    # Todo: remove this
+                    vv = int(vv)
+                    if (p < 0) or (vv==0):
+                        pass
+                    else:
+                        if vv == 1:
+                            temp["o"].append(p)
+                        if vv > 1:
+                            temp["m"].append([p,vv])
+
+                [num_o, num_m] = [len(temp["o"]), len(temp["m"])]
+                strNumO = str(num_o)
+                ssO = ' '.join([str(i) for i in temp["o"]])
+                strNumM = str(num_m)
+                ssM = ' '.join(["%d %d "%(i[0], i[1]) for i in temp["m"]])
+                outf.write(' '.join([strNumO, ssO, strNumM, ssM]) + "\n")
+                f.close()
+            except:
+                msg = time.asctime() + ":: " +"Failed to read file %"%n
+                print_to_log(self.runLog, msg)
+
+            if n%10 == 0:
+                msg = time.asctime() + ":: " +"Translated %d patterns"%n
+                print_to_log(self.runLog, msg)
+
+        outf.close()
+
+        # Write average photon and mask patterns to file
+        outh5 = h5py.File(outFNH5Avg, 'w')
+        outh5.create_dataset("average", data=avg, compression="gzip", compression_opts=9)
+        outh5.create_dataset("mask", data=mask, compression="gzip", compression_opts=9)
+        outh5.close()
+
+    def showDetector(self):
+        """
+        Shows detector pixels as points on scatter plot; could be slow for large detectors.
+        """
+        if self.detector is not None:
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            ax.scatter(self.detector[:,0], self.detector[:,1], self.detector[:,2], c='r', marker='s')
+            ax.set_zlim3d(-self.qmax, self.qmax)
+            plt.show()
+        else:
+            msg = time.asctime() + ":: " + "Detector not initiated."
+            print_to_log(self.runLog, msg)
+
+    # The following functions have not been tested. Use with caution!!!
     def makeTestParticleAndSupport(self, inParticleRadius=5.9, inDamping=1.5, inFrac=0.5, inPad=1.8):
         """
         Recipe for creating random, "low-passed-filtered binary" contrast by
@@ -189,7 +343,7 @@ class EMCCaseGenerator(object):
         self.numPixToEdge = N.floor(self.qmax / N.sqrt(zSq/(1.+zSq) + (zSq/N.sqrt(1+zSq) -self.z)))
         self.detectorDist = self.z * self.numPixToEdge
         msg = time.asctime() + ":: " +"(qmin, qmax, detectorDist)=(%lf, %lf, %lf)"%(self.qmin, self.qmax, self.detectorDist)
-        print_to_log(runLogFile, msg)
+        print_to_log(self.runLog, msg)
 
         #make detector
         [x,y] = N.mgrid[-self.numPixToEdge:self.numPixToEdge+1, -self.numPixToEdge:self.numPixToEdge+1]
@@ -237,145 +391,6 @@ class EMCCaseGenerator(object):
         self.intensities = N.fft.fftshift(N.fft.fftn(self.intensities))
         self.intensities = N.abs(self.intensities * self.intensities.conjugate())
 
-    def readGeomFromPhotonData(self, fn):
-        """
-        Try to extract detector positions from datafile
-
-        """
-        msg = time.asctime() + ":: " +"Reading geometry file using file %s"%fn
-        print_to_log(runLogFile, msg)
-        f = h5py.File(fn, 'r')
-        self.detectorDist = (f["params/geom/detectorDist"].value)
-        #We expect the detector to always be square of length 2*self.numPixToEdge+1
-        (r,c) = f["data/data"].shape
-        if (r == c and (r%2==1)):
-            self.numPixToEdge = (r-1)/2
-        else:
-            msg = time.asctime() + ":: " +"Your array has shape %d %d, Only odd-length square detectors allowed now. Quitting"%(r,c)
-            print_to_log(runLogFile, msg)
-            sys.exit()
-        pixH = (f['params/geom/pixelHeight'].value)
-        pixW = (f['params/geom/pixelWidth'].value)
-        if(pixH == pixW):
-            self.pixSize = pixH
-        maxScattAng = N.arctan(self.numPixToEdge * self.pixSize / self.detectorDist)
-        zL = self.detectorDist / self.pixSize
-        self.qmax = int(2 * self.numPixToEdge * N.sin(0.5*maxScattAng) / N.tan(maxScattAng))
-
-        #Write detector to file
-        [x,y] = N.mgrid[-self.numPixToEdge:self.numPixToEdge+1, -self.numPixToEdge:self.numPixToEdge+1]
-        tempDetectorPix = [self.placePixel(i,j,zL) for i,j in zip(x.flat, y.flat)]
-        qualifiedDetectorPix = [i for i in tempDetectorPix if (N.sqrt(i[0]*i[0] +i[1]*i[1] + i[2]*i[2])>self.qmin and N.sqrt(i[0]*i[0] +i[1]*i[1] + i[2]*i[2])<self.qmax and N.abs(i[0])>3)]
-        self.detector = N.array(qualifiedDetectorPix)
-
-        # qmin defaults to 2 pixel beamstop
-        # qmin = 1.4302966531242025 * (self.qmax / particleRadiusInPix)
-        self.qmin = 2
-        fQmin = N.floor(self.qmin)
-        [x,y,z] = N.mgrid[-fQmin:fQmin+1, -fQmin:fQmin+1, -fQmin:fQmin+1]
-        self.beamstop = N.array([[xx,yy,zz] for xx,yy,zz in zip(x.flat, y.flat, z.flat) if N.sqrt(xx*xx + yy*yy + zz*zz)<=self.qmin])
-
-    def readGeomFromDetectorFile(self, fn):
-        f = open(fn, "r")
-        line1 = [int(x) for x in f.readline().split("\t")]
-        self.qmax = int(line1[0])
-        self.qmin = 2
-
-        d = f.readlines()
-        dLoc = [[float(y) for y in x.split("\t")] for x in d]
-        self.detector = N.array(dLoc[:line1[1]])
-        self.beamstop = N.array(dLoc[line1[1]:])
-        f.close()
-        return
-
-    def writeSparsePhotonFile(self, fileList, outFN, outFNH5Avg):
-        # Read file
-        msg = time.asctime() + ":: " +"Writing diffr output to %s"%outFN
-        print_to_log(runLogFile, msg)
-        [x,y] = N.mgrid[-self.numPixToEdge:self.numPixToEdge+1, -self.numPixToEdge:self.numPixToEdge+1]
-        zL = self.detectorDist / self.pixSize
-        tempDetectorPix = N.array([self.placePixel(i,j,zL) for i,j in zip(x.flat, y.flat)])
-
-        pos = -1 + 0*x.flatten()
-        currPos = 0
-        flatMask = 0.*pos
-        for p,v in enumerate(tempDetectorPix):
-            if N.sqrt(v[0]*v[0] +v[1]*v[1] + v[2]*v[2])<self.qmax and N.sqrt(v[0]*v[0] +v[1]*v[1] + v[2]*v[2])>self.qmin and N.abs(v[0])>3:
-                    pos[p] = currPos
-                    flatMask[p] = 1.
-                    currPos += 1
-
-        numFilesToAvgForMeanCount = min([200, len(fileList)])
-        meanPhoton = 0.
-        totPhoton = 0.
-        for fn in fileList[:numFilesToAvgForMeanCount]:
-            f = h5py.File(fn, 'r')
-            meanPhoton += N.mean((f["data/data"].value).flatten())
-            totPhoton += N.sum((f["data/data"].value).flatten())
-            f.close()
-        meanPhoton /= 1.*numFilesToAvgForMeanCount
-        totPhoton /= 1.*numFilesToAvgForMeanCount
-
-        msg = time.asctime() + ":: " +"Average intensities: %lf"%(totPhoton)
-        print_to_log(runLogFile, msg)
-        outf = open(outFN, "w")
-        outf.write("%d %lf \n"%(len(fileList), meanPhoton))
-        mask = flatMask.reshape(2*self.numPixToEdge+1, -1)
-        avg = 0.*mask
-
-        msg = time.asctime() + ":: " +"Converting individual data frames to sparse format %s"%("."*20)
-        print_to_log(runLogFile, msg)
-
-        for n,fn in enumerate(fileList):
-            try:
-                f = h5py.File(fn, 'r')
-                v = f["data/data"].value
-                avg += v
-                temp = {"o":[], "m":[]}
-
-                for p,vv in zip(pos, v.flat):
-                    # Todo: remove this
-                    vv = int(vv)
-                    if (p < 0) or (vv==0):
-                        pass
-                    else:
-                        if vv == 1:
-                            temp["o"].append(p)
-                        if vv > 1:
-                            temp["m"].append([p,vv])
-
-                [num_o, num_m] = [len(temp["o"]), len(temp["m"])]
-                strNumO = str(num_o)
-                ssO = ' '.join([str(i) for i in temp["o"]])
-                strNumM = str(num_m)
-                ssM = ' '.join(["%d %d "%(i[0], i[1]) for i in temp["m"]])
-                outf.write(' '.join([strNumO, ssO, strNumM, ssM]) + "\n")
-                f.close()
-            except:
-                msg = time.asctime() + ":: " +"Failed to read file %"%n
-                print_to_log(runLogFile, msg)
-
-            if n%10 == 0:
-                msg = time.asctime() + ":: " +"Translated %d patterns"%n
-                print_to_log(runLogFile, msg)
-
-        outf.close()
-
-        outh5 = h5py.File(outFNH5Avg, 'w')
-        outh5.create_dataset("average", data=avg, compression="gzip", compression_opts=9)
-        outh5.create_dataset("mask", data=mask, compression="gzip", compression_opts=9)
-        outh5.close()
-
-    def showDetector(self):
-        """
-        Shows detector pixels as points on scatter plot; could be slow for large detectors.
-        """
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(self.detector[:,0], self.detector[:,1], self.detector[:,2], c='r', marker='s')
-        ax.set_zlim3d(-self.qmax, self.qmax)
-        plt.show()
-
     def showDensity(self):
         """
         Shows particle density as an array of sequential, equal-sized 2D sections.
@@ -421,6 +436,20 @@ class EMCCaseGenerator(object):
             ax.set_title('%d'%(i-self.qmax), color='white', position=(0.85,0.))
         plt.show()
 
+    def writeSupportToFile(self, filename="support.dat"):
+        header = "%d\t%d\n" % (self.qmax, len(self.supportPositions))
+        f = open(filename, 'w')
+        f.write(header)
+        for i in self.supportPositions:
+            text = "%d\t%d\t%d\n" % (i[0], i[1], i[2])
+            f.write(text)
+        f.close()
+
+    def writeDensityToFile(self, filename="density.dat"):
+        f = open(filename, "w")
+        self.density.tofile(f, sep="\t")
+        f.close()
+
     def writeAllOuputToFile(self, supportFileName="support.dat", densityFileName="density.dat", detectorFileName="detector.dat", intensitiesFileName="intensity.dat"):
         """
         Convenience function for writing output
@@ -439,54 +468,47 @@ gen = EMCCaseGenerator()
 ###############################################################
 # Check that subdirectories for intermediate output exist
 ###############################################################
-if not os.path.exists(op.tmpOutDir):
-    os.makedirs(op.tmpOutDir)
-
-if not os.path.exists(op.outDir):
-    os.makedirs(op.outDir)
-
+create_directory(op.tmpOutDir)
+create_directory(op.outDir)
 runInstanceDir = os.path.join(op.tmpOutDir, op.timeStamp + "/")
+create_directory(runInstanceDir, err_msg=" Assuming that you are continuing a previous reconstruction.")
 
-if os.path.exists(runInstanceDir):
-    msg = time.asctime() + ":: " +"The directory " + runInstanceDir + " exists. Assuming that you are continuing a previous reconstruction."
-    print_to_log(runLogFile, msg)
-else:
-    os.makedirs(runInstanceDir)
-
-outputLog = os.path.join(runInstanceDir, "EMC_extended.log")
-photonFiles = glob.glob(os.path.join(op.inputDir,"diffr*.h5"))
-sparsePhotonFile = os.path.join(op.tmpOutDir, "photons.dat")
-avgPatternFile = os.path.join(op.tmpOutDir, "photons.h5")
-detectorFile = os.path.join(op.tmpOutDir, "detector.dat")
-lockFile = os.path.join(op.tmpOutDir, "write.lock")
+outputLog           = os.path.join(runInstanceDir, "EMC_extended.log")
+photonFiles         = glob.glob(os.path.join(op.inputDir,"diffr*.h5"))
+sparsePhotonFile    = os.path.join(op.tmpOutDir, "photons.dat")
+avgPatternFile      = os.path.join(op.tmpOutDir, "photons.h5")
+detectorFile        = os.path.join(op.tmpOutDir, "detector.dat")
+lockFile            = os.path.join(op.tmpOutDir, "write.lock")
 
 ###############################################################
-# Make photons.dat and detector.dat if they don't exist
-# Create time-tagged output subdirectory for intermediate states
+# A lock file is created if subprocess is converting sparse photons
+#   so that another subprocess does not clobber an ongoing conversion.
+# Make photons.dat and detector.dat if they don't exist.
+# Create time-tagged output subdirectory for intermediate states.
 ###############################################################
 while (os.path.isfile(lockFile)):
+    # Sleep in 30 s intervals, then check if sparse photon lock has been released.
     sleep_duration = 30
-    msg = time.asctime() + ":: " +"Lock file in " + op.tmpOutDir + ". "
+    msg = "Lock file in " + op.tmpOutDir + ". "
     msg += "Photons.dat likely being written to tmpDir by another process. "
     msg += "Sleeping this process for %d s." % sleep_duration
-    print_to_log(runLogFile, msg)
+    print_to_log(msg)
     time.sleep(sleep_duration)
 
 if not (os.path.isfile(sparsePhotonFile) and os.path.isfile(detectorFile)):
-    msg = time.asctime() + ":: " +"Photons.dat and detector.dat not found in " + op.tmpOutDir + ". Will create them now..."
+    msg = "Photons.dat and detector.dat not found in " + op.tmpOutDir + ". Will create them now..."
+    print_to_log(msg)
     os.system("touch %s" % lockFile)
-    print_to_log(runLogFile, msg)
     gen.readGeomFromPhotonData(photonFiles[0])
     gen.writeDetectorToFile(filename=os.path.join(op.tmpOutDir, "detector.dat"))
     gen.writeSparsePhotonFile(photonFiles, sparsePhotonFile, avgPatternFile)
+    print_to_log("Sparse photons file created. Deleting lock file now")
     os.system("rm %s " % lockFile)
 else:
-    msg = time.asctime() + ":: " +"Photons.dat and detector.dat already exists in " + op.tmpOutDir + "."
-    print_to_log(runLogFile, msg)
+    msg = "Photons.dat and detector.dat already exists in " + op.tmpOutDir + "."
+    print_to_log(msg)
     gen.readGeomFromDetectorFile(os.path.join(op.tmpOutDir, "detector.dat"))
-    msg = time.asctime() + ":: " +"%d %d %d"%(gen.qmax, len(gen.detector), len(gen.beamstop))
-    print_to_log(runLogFile, msg)
-    #TODO: Read detector.dat values into reconstruction object
+    print_to_log("Detector parameters: %d %d %d"%(gen.qmax, len(gen.detector), len(gen.beamstop)))
 
 
 msg = time.asctime() + ":: " +"Creating symbolic link to crucial files in output subdirectory, " + runInstanceDir
@@ -504,11 +526,9 @@ if not (os.path.isdir(os.path.join(runInstanceDir,"supp_py_modules"))):
 if not (os.path.isfile(os.path.join(op.tmpOutDir, "make_diagnostic_figures.py"))):
     os.symlink(os.path.join(op.srcDir,"make_diagnostic_figures.py"), os.path.join(op.tmpOutDir, "make_diagnostic_figures.py"))
 
-
 ###############################################################
-# Iterate EMC
+# Create dummy destination h5 for intermediate output from EMC
 ###############################################################
-
 os.chdir(runInstanceDir)
 outFile = "orient.h5"
 offset_iter = 0
@@ -534,13 +554,15 @@ else:
     f = h5py.File(outFile, 'r')
     offset_iter = len(f["/history/intensities"].keys())
     f.close()
-    msg = time.asctime() + ":: " +"Output will be appended to the results of %d iterations before this."%offset_iter
-    print_to_log(runLogFile, msg)
-intensL = 2*gen.qmax + 1
+    msg = "Output will be appended to the results of %d iterations before this."%offset_iter
+    print_to_log(msg)
 
+###############################################################
+# Iterate EMC
+###############################################################
+intensL = 2*gen.qmax + 1
 iter_num = 1
 currQuat = op.initialQuat
-
 while(currQuat <= op.maxQuat):
     if os.path.isfile(os.path.join(runInstanceDir,"quaternion.dat")):
         os.remove(os.path.join(runInstanceDir,"quaternion.dat"))
@@ -549,17 +571,19 @@ while(currQuat <= op.maxQuat):
     diff = 1.
     while (iter_num <= op.maxIter):
         if (iter_num > 1 and diff < op.minError):
-            msg = time.asctime() + ":: " +"Error %0.3e is smaller than threshold %0.3e. Going to next quaternion."%(diff, op.minError)
-            print_to_log(runLogFile, msg)
+            print_to_log("Error %0.3e is smaller than threshold %0.3e. Going to next quaternion."%(diff, op.minError))
             break
-        msg = time.asctime() + ":: " +"Beginning iteration %d, with quaternion %d %s"%(iter_num+offset_iter, currQuat, "."*20)
-        print_to_log(runLogFile, msg)
+        print_to_log("Beginning iteration %d, with quaternion %d %s"%(iter_num+offset_iter, currQuat, "."*20))
+
+        # Here is the actual timed EMC iteration, which calls the EMC.c code.
         start_time = time.time()
         os.system("./EMC 1")
         time_taken = time.time() - start_time
-        msg = time.asctime() + ":: " +"Took %lf s"%(time_taken)
-        print_to_log(runLogFile, msg)
+        print_to_log("Took %lf s"%(time_taken))
 
+        # Read intermediate output of EMC.c and stuff them into a h5 file
+        # Delete these EMC.c-generated intermediate files afterwards,
+        # except finish_intensity.dat --> start_intensity.dat for next iteration.
         gen.intensities = (N.fromfile("finish_intensity.dat", sep=" ")).reshape(intensL, intensL, intensL)
 
         data_info = N.fromfile("mutual_info.dat", sep=" ")
@@ -602,7 +626,8 @@ while(currQuat <= op.maxQuat):
     currQuat += 1
 
 ###############################################################
-# Save EMC_output to S2E-h5 format
+# Save final EMC_output to S2E-h5 format
+#   using soft-links to old versions if necessary
 ###############################################################
 
 c = N.array([gen.qmax, gen.qmax, gen.qmax])
@@ -620,5 +645,4 @@ f.create_dataset("data/center", data=c)
 f.create_dataset("misc/qmax", data=gen.qmax)
 f.create_dataset("misc/detector", data=gen.detector)
 f.create_dataset("misc/beamstop", data=gen.beamstop)
-
 f.close()
