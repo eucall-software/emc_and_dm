@@ -12,23 +12,29 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 #TODO: This module has to be modified before it can work
 #TODO: Functions in the current viewRecon.py has to be simplified and placed into this master script.
 
+# Scan directories for reconstructions that were done
+# TODO: Rename directories to EMC_...
 dirs = glob.glob("20*/")
 cwd = os.getcwd()
 outputFN = "orient.h5"
-#for dir in dirs:
-#    os.chdir(dir)
-#    print "="*80
-#    print "Making images for %s "%dir + "."*20
-#    VR.make_panel_of_intensity_slices(outputFN, c_n=16)
-#    VR.make_error_time_plot(outputFN)
-#    VR.make_mutual_info_plot(outputFN)
-#    print "="*80
-#    os.chdir(cwd)
+for dir in dirs:
+    os.chdir(dir)
+    print "="*80
+    print "Making images for %s "%dir + "."*20
+    VR.make_panel_of_intensity_slices(outputFN, c_n=16)
+    VR.make_error_time_plot(outputFN)
+    VR.make_mutual_info_plot(outputFN)
+    print "="*80
+    os.chdir(cwd)
 
-# tarBallName = (os.getcwd().split('/')[-1])+".tgz"
-# os.system("tar -czf  %s  "%tarBallName + ''.join([s+"*.pdf " for s in dirs]))
-# print "Images saved in %s" % tarBallName
+tarBallName = (os.getcwd().split('/')[-1])+".tgz"
+os.system("tar -czf  %s  "%tarBallName + ''.join([s+"*.pdf " for s in dirs]))
+print "Images saved in %s" % tarBallName
 
+
+# Input: directories where output intensities are stored
+#
+# TODO: These have to be moved into a single file
 curr_dir = dirs[0]
 curr_file = os.path.join(curr_dir, outputFN)
 t_intens = (read.extract_final_arr_from_h5(curr_file, "/history/intensities")).astype("float")
@@ -58,7 +64,7 @@ fig, ax = plt.subplots(3, num_dirs/3 + 1, sharex=True, sharey=True, figsize=(2.5
 for r in range(rows):
     for c in range(cols):
         if intens_counter >= num_dirs:
-           break
+            break
         dir = dirs[intens_counter]
         t0 = time.time()
         curr_file = os.path.join(dir, outputFN)
@@ -95,3 +101,5 @@ cbar_ax2 = fig2.add_axes([0.9, 0.1, 0.025, 0.8])
 fig2.colorbar(im, cax=cbar_ax2, label="log10(intensities)")
 plt.setp(ax2, xticks=xt, xticklabels=xt_l, yticks=yt, yticklabels=yt_l)
 plt.show()
+#TODO: Instead of drawing them to screen, save these as images to file
+#TODO: Save merged intensities to file.
