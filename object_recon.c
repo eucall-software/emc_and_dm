@@ -37,13 +37,14 @@ finish_object.dat, mtf.dat, object.log
 #define MTF 20
 
 int (*supp)[3] ;
+int *supp_flag ;
 int *ord, *beg, *end ;
-double *tempx, ***x, ***p1, ***r1, ***p2, ***mag, ***ave ;
+double *tempx, ***x, ***p1, ***r1, ***p2, ***mag, ***ave, ***min_state ;
 double *fftw_array_r ;
 fftw_complex *fftw_array_c ;
 fftw_plan forward_plan, backward_plan ; 
 
-int size, qmax, size_supp, num_supp, ave_iter = 0 ;
+int size, qmax, size_supp, num_supp, shrink_interval, ave_iter = 0 ;
 
 void print_recon() ;
 void print_mtf() ;
@@ -57,18 +58,20 @@ void proj2( double***, double*** ) ;
 
 int main(int argc, char* argv[])
 	{
-	int iter, start_ave, i ;
-	double error ;
+	int num_trials, iter, start_ave, i, t;
+	double error, min_error ;
 	FILE *fp ;
 	
-	if ( argc == 3 )
+	if ( argc == 5 )
 		{
-		iter = atoi(argv[1]) ;
-		start_ave = atoi(argv[2]) ;
+        num_trials      = atoi(argv[1]) ;
+		iter            = atoi(argv[2]) ;
+		start_ave       = atoi(argv[3]) ;
+        shrink_interval = atoi(argv[4]) ;
 		}
 	else
 		{
-		printf("expected three argument: iter, start_ave\n") ;
+		printf("expected four arguments: num_trials, num_iter start_ave shrink_interval\n") ;
 		return 0 ;
 		}
 		
@@ -78,29 +81,72 @@ int main(int argc, char* argv[])
 	fp = fopen("object.log", "w") ;
 	fprintf(fp, "size = %d    size_supp = %d    num_supp = %d\n\n", size, size_supp, num_supp) ;
 	fclose(fp) ;
-	
-	for (i = 1 ; i <= iter ; ++i)
-		{
-		error = diff() ;
-		
-		if (i > start_ave)
-			ave_recon(p2) ;
-		
-		fp = fopen("object.log", "a") ;
-		fprintf(fp, "iter = %d    error = %f\n", i, error) ;
-		fclose(fp) ;
-		}
-	
-	print_recon() ;
-	
-	print_mtf() ;
-	
+
+    // TODO: Loop over a number of N_trials
+    // TODO: Loop over a number of N_iter
+    // TODO: Once "averaging begins, then we seek the N smallest error reconstruction(s)
+    // TODO: Compute translation and rotation between different constructions before merging
+    //          We'll do this in a complete search over orientations and translations.
+    // TODO: Save the lowest error file out to disk
+    // TODO: Do not compute MTF here. Do this outside of each attempt.
+    for (t = 1 ; t <= num_trials ; ++t)
+        {
+	    min_error = 100. ;
+        randomize_state() ;
+        fp = fopen("object.log", "a") ;
+        fprintf(fp, "\nStarting trial %02d\n", t) ;
+        fclose(fp) ;
+        for (i = 1 ; i <= iter ; ++i)
+            {
+            error = diff() ;
+        
+            if (i % shrink_interval && t == 1) //Only shrinkwrap on the first trial
+                shrink_support(p2) ;
+
+            if (i > start_ave)
+                {
+                ave_recon(p2) ;
+                if (error < min_error)
+                    {
+                    min_error = error ;
+                    replace_min_recon(p2) ; 
+                    }
+                }
+            fp = fopen("object.log", "a") ;
+            fprintf(fp, "iter = %d    error = %f\n", i, error) ;
+            fclose(fp) ;
+            }
+        
+        print_recon() ;
+        print_min_recon(t) ; 	
+        print_mtf() ;
+        }
 	free_mem() ;
 	
 	return 0 ;
 	}
 	
-	
+
+void randomize_state()
+    {
+    int s, is, js, ks, i, j, k ;
+    srand( time(0) ) ;
+    
+    for (s = 0 ; s < num_supp ; ++s)
+        {
+        is = supp[s][0] ;
+        js = supp[s][1] ;
+        ks = supp[s][2] ;
+        
+        x[is][js][ks] = ((double) rand()) / RAND_MAX ;
+        }
+    
+    for (i = 0 ; i < size_supp ; ++i)
+    for (j = 0 ; j < size_supp ; ++j)
+    for (k = 0 ; k < size_supp ; ++k)
+        x[i][j][k] = ((double) rand()) / RAND_MAX ;
+    }
+
 void print_recon()
 	{
 	FILE *fp ;
@@ -120,6 +166,25 @@ void print_recon()
 	fclose(fp) ;
 	}
 	
+void print_min_recon(int num)
+	{
+	FILE *fp ;
+	int i, j, k ;
+    char buffer [100] ;
+    sprintf(buffer, "finish_min_object%03d.dat", num) ;
+	fp = fopen(buffer, "w") ;
+	
+	for (i = 0 ; i < size_supp ; ++i)
+	for (j = 0 ; j < size_supp ; ++j)
+		{
+		for (k = 0 ; k < size_supp ; ++k)
+			fprintf(fp, "%f ", min_state[i][j][k]) ;
+			
+		fprintf(fp, "\n") ;
+		}
+		
+	fclose(fp) ;
+	}
 
 int setup()
 	{
@@ -138,17 +203,19 @@ int setup()
 	size = 2 * qmax + 1 ;
 
 	supp = malloc(num_supp * sizeof(*supp)) ;
-	
+    supp_flag = malloc(num_supp * sizeof(*supp_flag)) ;	
 	size_supp = 0 ;
 	for (s = 0 ; s < num_supp ; ++s)
-	for (i = 0 ; i < 3 ; ++i)
-		{
-		fscanf(fp, "%d", &supp[s][i]) ;
-		
-		if (supp[s][i] > size_supp)
-			size_supp = supp[s][i] ;
-		}
-
+        {
+        supp_flag[s] = 1 ;
+        for (i = 0 ; i < 3 ; ++i)
+            {
+            fscanf(fp, "%d", &supp[s][i]) ;
+            
+            if (supp[s][i] > size_supp)
+                size_supp = supp[s][i] ;
+            }
+        }
 	++size_supp ;
 
 	fclose(fp) ;
@@ -171,7 +238,8 @@ int setup()
 	r1 = malloc(size * sizeof(double**)) ;
 	p2 = malloc(size * sizeof(double**)) ;
 	ave = malloc(size * sizeof(double**)) ;
-	
+    min_state = malloc(size * sizeof(double **)) ;
+
 	for (i = 0 ; i < size ; ++i)
 		{
 		mag[i] = malloc(size * sizeof(double*)) ;
@@ -180,6 +248,7 @@ int setup()
 		r1[i] = malloc(size * sizeof(double*)) ;
 		p2[i] = malloc(size * sizeof(double*)) ;
 		ave[i] = malloc(size * sizeof(double*)) ;
+		min_state[i] = malloc(size * sizeof(double*)) ;
 		
 		for (j = 0 ; j < size ; ++j)
 			{
@@ -189,6 +258,7 @@ int setup()
 			r1[i][j] = malloc(size * sizeof(double)) ;
 			p2[i][j] = malloc(size * sizeof(double)) ;
 			ave[i][j] = malloc(size * sizeof(double)) ;
+			min_state[i][j] = malloc(size * sizeof(double)) ;
 			}
 		}
 		
@@ -264,6 +334,7 @@ void free_mem()
 	int i, j ;
 	
 	free(supp) ;
+    free(supp_flag) ;
     free(ord) ;
     free(beg) ;
     free(end) ;
@@ -273,6 +344,7 @@ void free_mem()
 		{
 		for (j = 0 ; j < size ; ++j)
 			{
+            free(min_state[i][j]) ;
 			free(mag[i][j]) ;
 			free(x[i][j]) ;
 			free(p1[i][j]) ;
@@ -280,7 +352,7 @@ void free_mem()
 			free(p2[i][j]) ;
 			free(ave[i][j]) ;
 			}
-			
+        free(min_state[i]) ;			
 		free(mag[i]) ;
 		free(x[i]) ;
 		free(p1[i]) ;
@@ -288,7 +360,8 @@ void free_mem()
 		free(p2[i]) ;
 		free(ave[i]) ;
 		}
-		
+	
+    free(min_state) ;
 	free(mag) ;
 	free(x) ;
 	free(p1) ;
@@ -316,7 +389,18 @@ void ave_recon( double ***in )
 	++ave_iter ;
 	}
 	
+
+void replace_min_recon( double ***in )
+	{
+	int i, j, k ;
 	
+	for (i = 0 ; i < size ; ++i)
+	for (j = 0 ; j < size ; ++j)
+	for (k = 0 ; k < size ; ++k)
+		min_state[i][j][k] += in[i][j][k] ;
+	}
+
+
 void print_mtf()
 	{
 	double rel_contrast[MTF] ;
@@ -377,7 +461,7 @@ double diff()
 
     proj1(x, p1) ;
     
-    double leash = 0.1;
+    double leash = 0.2;
 	for (i = 0 ; i < size ; ++i)
 	for (j = 0 ; j < size ; ++j)
 	for (k = 0 ; k < size ; ++k)
@@ -469,7 +553,7 @@ void proj2( double ***in, double ***out )
 		
 		val = in[is][js][ks] ;
 		
-		if (val < 0.)
+		if (val < 0. || supp_flag[s] == 0)
 			continue ;
 			
 		out[is][js][ks] = val ;
@@ -510,3 +594,70 @@ void proj2( double ***in, double ***out )
         }
     */
 	}
+
+
+void shrink_support(double ***in)
+    {
+    int s, is, js, ks ;
+    double mean_1, mean_2, c_mean_1, c_mean_2, t_mean_1, t_mean_2 ;
+    double update_err ;
+    mean_1 = 1. ;
+    mean_2 = 0. ;
+    update_err = 10. ;
+    while (update_err > 1.E-4)
+        {
+        c_mean_1 = c_mean_2 = 0. ;
+        t_mean_1 = t_mean_2 = 0. ;
+        for (s = 0 ; s < num_supp ; s++)
+            {
+            is = supp[s][0] ;
+            js = supp[s][1] ;
+            ks = supp[s][2] ;
+            val = in[is][js][ks] ;
+            if (fabs(val - mean_1) < fabs(val - mean_2))
+                  {
+                  t_mean_1 += val ;
+                  c_mean_1 += 1. ;
+                  }
+            else
+                  {
+                  t_mean_2 += val ;
+                  c_mean_2 += 1. ;
+                  }
+            }
+        t_mean_1 /= c_mean_1 ;
+        t_mean_2 /= c_mean_2 ;
+        update_err = fabs(t_mean_1 - mean_1) + fabs(t_mean_2 - mean_2) ;
+        mean_1 = t_mean_1 ;
+        mean_2 = t_mean_2 ;
+        }
+    //Mean_1 should be > mean_2
+    if (t_mean_1 > t_mean_2) 
+        {
+        mean_1 = t_mean_1 ; 
+        mean_2 = t_mean_2 ;
+        }
+    else 
+        {
+        mean_2 = t_mean_1 ; 
+        mean_1 = t_mean_2 ;
+        }
+
+    //Set support flag based on mean partitions
+    for (s = 0 ; s < num_supp ; s++)
+        {
+        is = supp[s][0] ;
+        js = supp[s][1] ;
+        ks = supp[s][2] ;
+        val = in[is][js][ks] ;
+        if (fabs(val - mean_1) < fabs(val - mean_2))
+            {
+            supp_flag[i] = 1 ;
+            }
+        else
+            supp_flag[i] = 0 ;
+        }
+    //Extend the padding to enforce continuity?
+    }
+    
+
