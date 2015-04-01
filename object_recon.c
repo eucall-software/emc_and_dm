@@ -77,11 +77,11 @@ int main(int argc, char* argv[])
 	else
 		{
 		printf("expected five arguments:\n" 
-        "shrinkwrap_iterations\n"
-        "shrinkwrap_intervals\n"
-        "num_trials\n"
-        "num_iter\n"
-        "start_ave\n") ;
+        "\tshrinkwrap_iterations\n"
+        "\tshrinkwrap_intervals\n"
+        "\tnum_trials\n"
+        "\tnum_iter\n"
+        "\tstart_ave\n") ;
 		return 0 ;
 		}
 		
