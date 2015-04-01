@@ -44,7 +44,7 @@ double *fftw_array_r ;
 fftw_complex *fftw_array_c ;
 fftw_plan forward_plan, backward_plan ; 
 
-int size, qmax, size_supp, num_supp, shrink_interval, ave_iter = 0 ;
+int size, qmax, len_supp, num_supp, shrink_interval, ave_iter = 0 ;
 
 void print_recon() ;
 void print_mtf() ;
@@ -52,75 +52,95 @@ void ave_recon( double*** ) ;
 int setup() ;
 void free_mem() ;
 double diff() ;
+void randomize_state() ;
+void shrink_support(double ***) ;
+void replace_min_recon(double ***) ;
+void print_min_recon(int) ;
 void proj1( double***, double*** ) ;
 void proj2( double***, double*** ) ;
 
 
 int main(int argc, char* argv[])
 	{
-	int num_trials, iter, start_ave, i, t;
+	int shrinkwrap_iter, num_trials, iter, start_ave, i, t;
 	double error, min_error ;
 	FILE *fp ;
 	
-	if ( argc == 5 )
+	if ( argc == 6 )
 		{
-        num_trials      = atoi(argv[1]) ;
-		iter            = atoi(argv[2]) ;
-		start_ave       = atoi(argv[3]) ;
-        shrink_interval = atoi(argv[4]) ;
+        shrinkwrap_iter = atoi(argv[1]) ;
+        shrink_interval = atoi(argv[2]) ;
+        num_trials      = atoi(argv[3]) ;
+		iter            = atoi(argv[4]) ;
+		start_ave       = atoi(argv[5]) ;
 		}
 	else
 		{
-		printf("expected four arguments: num_trials, num_iter start_ave shrink_interval\n") ;
+		printf("expected five arguments:\n" 
+        "shrinkwrap_iterations\n"
+        "shrinkwrap_intervals\n"
+        "num_trials\n"
+        "num_iter\n"
+        "start_ave\n") ;
 		return 0 ;
 		}
 		
 	if (!setup())
 		return 0 ;
 	
-	fp = fopen("object.log", "w") ;
-	fprintf(fp, "size = %d    size_supp = %d    num_supp = %d\n\n", size, size_supp, num_supp) ;
+	fp = fopen("shrinkwrap.log", "w") ;
+	fprintf(fp, "size = %d    len_supp = %d    num_supp = %d\n\n", size, len_supp, num_supp) ;
 	fclose(fp) ;
 
-    // TODO: Loop over a number of N_trials
-    // TODO: Loop over a number of N_iter
-    // TODO: Once "averaging begins, then we seek the N smallest error reconstruction(s)
     // TODO: Compute translation and rotation between different constructions before merging
-    //          We'll do this in a complete search over orientations and translations.
+    // We'll do this in a complete search over translations, then orientations.
     // TODO: Save the lowest error file out to disk
-    // TODO: Do not compute MTF here. Do this outside of each attempt.
+
+    //This is the shrink-wrap cycle.
+    randomize_state() ;
+    fp = fopen("shrinkwrap.log", "a") ;
+    fprintf(fp, "\nStarting support shrink-wrap cycle.\n") ;
+    fclose(fp) ;
+    for (i = 1 ; i <= shrinkwrap_iter ; ++i)
+        {
+        error = diff() ;
+        if (i % shrink_interval) 
+            shrink_support(p2) ;
+
+        fp = fopen("shrinkwrap.log", "a") ;
+        fprintf(fp, "iter = %d    error = %f\n", i, error) ;
+        fclose(fp) ;
+        }
+
+    //This is the averaging cycle
     for (t = 1 ; t <= num_trials ; ++t)
         {
+        char obj_buffer [100] ;
+        sprintf(obj_buffer, "object%03d.log", t) ;
+        fp = fopen(obj_buffer, "w") ;
+        fprintf(fp, "size = %d    len_supp = %d    num_supp = %d\n\n", size, len_supp, num_supp) ;
+        fclose(fp) ;
 	    min_error = 100. ;
         randomize_state() ;
-        fp = fopen("object.log", "a") ;
-        fprintf(fp, "\nStarting trial %02d\n", t) ;
-        fclose(fp) ;
+        fp = fopen(obj_buffer, "a") ;
+        fprintf(fp, "\nStarting trial %02d.\n", t) ;
         for (i = 1 ; i <= iter ; ++i)
             {
             error = diff() ;
-        
-            if (i % shrink_interval && t == 1) //Only shrinkwrap on the first trial
-                shrink_support(p2) ;
-
-            if (i > start_ave)
+            
+            if ((i > start_ave) && (error < min_error))
                 {
-                ave_recon(p2) ;
-                if (error < min_error)
-                    {
-                    min_error = error ;
-                    replace_min_recon(p2) ; 
-                    }
+                min_error = error ;
+                replace_min_recon(p2) ; 
                 }
-            fp = fopen("object.log", "a") ;
             fprintf(fp, "iter = %d    error = %f\n", i, error) ;
-            fclose(fp) ;
             }
-        
-        print_recon() ;
+        fclose(fp) ;
+        ave_recon(min_state) ;
         print_min_recon(t) ; 	
-        print_mtf() ;
         }
+    print_recon() ;
+    print_mtf() ;
 	free_mem() ;
 	
 	return 0 ;
@@ -141,9 +161,9 @@ void randomize_state()
         x[is][js][ks] = ((double) rand()) / RAND_MAX ;
         }
     
-    for (i = 0 ; i < size_supp ; ++i)
-    for (j = 0 ; j < size_supp ; ++j)
-    for (k = 0 ; k < size_supp ; ++k)
+    for (i = 0 ; i < len_supp ; ++i)
+    for (j = 0 ; j < len_supp ; ++j)
+    for (k = 0 ; k < len_supp ; ++k)
         x[i][j][k] = ((double) rand()) / RAND_MAX ;
     }
 
@@ -154,10 +174,10 @@ void print_recon()
 	
 	fp = fopen("finish_object.dat", "w") ;
 	
-	for (i = 0 ; i < size_supp ; ++i)
-	for (j = 0 ; j < size_supp ; ++j)
+	for (i = 0 ; i < len_supp ; ++i)
+	for (j = 0 ; j < len_supp ; ++j)
 		{
-		for (k = 0 ; k < size_supp ; ++k)
+		for (k = 0 ; k < len_supp ; ++k)
 			fprintf(fp, "%f ", ave[i][j][k] / ave_iter) ;
 			
 		fprintf(fp, "\n") ;
@@ -174,10 +194,10 @@ void print_min_recon(int num)
     sprintf(buffer, "finish_min_object%03d.dat", num) ;
 	fp = fopen(buffer, "w") ;
 	
-	for (i = 0 ; i < size_supp ; ++i)
-	for (j = 0 ; j < size_supp ; ++j)
+	for (i = 0 ; i < len_supp ; ++i)
+	for (j = 0 ; j < len_supp ; ++j)
 		{
-		for (k = 0 ; k < size_supp ; ++k)
+		for (k = 0 ; k < len_supp ; ++k)
 			fprintf(fp, "%f ", min_state[i][j][k]) ;
 			
 		fprintf(fp, "\n") ;
@@ -192,6 +212,8 @@ int setup()
 	double intens ;
 	FILE *fp ;
 
+    //TODO: What is the new support input?
+    //Spherical support is most suitable
 	fp = fopen("support.dat", "r") ;
 	if (!fp)
 		{
@@ -204,7 +226,7 @@ int setup()
 
 	supp = malloc(num_supp * sizeof(*supp)) ;
     supp_flag = malloc(num_supp * sizeof(*supp_flag)) ;	
-	size_supp = 0 ;
+	len_supp = 0 ;
 	for (s = 0 ; s < num_supp ; ++s)
         {
         supp_flag[s] = 1 ;
@@ -212,11 +234,11 @@ int setup()
             {
             fscanf(fp, "%d", &supp[s][i]) ;
             
-            if (supp[s][i] > size_supp)
-                size_supp = supp[s][i] ;
+            if (supp[s][i] > len_supp)
+                len_supp = supp[s][i] ;
             }
         }
-	++size_supp ;
+	++len_supp ;
 
 	fclose(fp) ;
 	
@@ -227,10 +249,10 @@ int setup()
 		return 0 ;
 		}
 	
-    ord = malloc(size_supp * size_supp * size_supp * sizeof(int));
-    beg = malloc(size_supp * size_supp * size_supp * sizeof(int));
-    end = malloc(size_supp * size_supp * size_supp * sizeof(int));
-    tempx = malloc(size_supp * size_supp * size_supp * sizeof(double));
+    ord = malloc(len_supp * len_supp * len_supp * sizeof(int));
+    beg = malloc(len_supp * len_supp * len_supp * sizeof(int));
+    end = malloc(len_supp * len_supp * len_supp * sizeof(int));
+    tempx = malloc(len_supp * len_supp * len_supp * sizeof(double));
     
 	mag = malloc(size * sizeof(double**)) ;
 	x = malloc(size * sizeof(double**)) ;
@@ -309,17 +331,17 @@ int setup()
 			x[is][js][ks] = ((double) rand()) / RAND_MAX ;
 			}
         
-		for (i = 0 ; i < size_supp ; ++i)
-		for (j = 0 ; j < size_supp ; ++j)
-		for (k = 0 ; k < size_supp ; ++k)
+		for (i = 0 ; i < len_supp ; ++i)
+		for (j = 0 ; j < len_supp ; ++j)
+		for (k = 0 ; k < len_supp ; ++k)
             x[i][j][k] = ((double) rand()) / RAND_MAX ;
             
 		}
 	else
 		{
-		for (i = 0 ; i < size_supp ; ++i)
-		for (j = 0 ; j < size_supp ; ++j)
-		for (k = 0 ; k < size_supp ; ++k)
+		for (i = 0 ; i < len_supp ; ++i)
+		for (j = 0 ; j < len_supp ; ++j)
+		for (k = 0 ; k < len_supp ; ++k)
 			fscanf(fp, "%lf", &x[i][j][k]) ;
 				
 		fclose(fp) ;
@@ -536,12 +558,12 @@ void proj2( double ***in, double ***out )
         out[i][j][k] = 0. ;
 
 	/*
-	for (i = 0 ; i < size_supp ; ++i)
-	for (j = 0 ; j < size_supp ; ++j)
-	for (k = 0 ; k < size_supp ; ++k)
+	for (i = 0 ; i < len_supp ; ++i)
+	for (j = 0 ; j < len_supp ; ++j)
+	for (k = 0 ; k < len_supp ; ++k)
         {
-        ord[(size_supp * i + j) * size_supp + k] = (size_supp * i + j) * size_supp + k;
-        tempx[(size_supp * i + j) * size_supp + k] = in[i][j][k] ;
+        ord[(len_supp * i + j) * len_supp + k] = (len_supp * i + j) * len_supp + k;
+        tempx[(len_supp * i + j) * len_supp + k] = in[i][j][k] ;
         }
 	*/
      
@@ -560,7 +582,7 @@ void proj2( double ***in, double ***out )
 		}
     
     /*
-    i = 0 ; beg[0] = 0 ; end[0] = size_supp*size_supp*size_supp ;
+    i = 0 ; beg[0] = 0 ; end[0] = len_supp*len_supp*len_supp ;
 	while (i >= 0) 
 		{
 		L = beg[i] ; R = end[i] - 1 ;
@@ -584,11 +606,11 @@ void proj2( double ***in, double ***out )
 			i--; 
 		}
 
-    cutoff = tempx[size_supp*size_supp*size_supp - num_supp] ;
+    cutoff = tempx[len_supp*len_supp*len_supp - num_supp] ;
      
-	for (i = 0 ; i < size_supp ; ++i)
-	for (j = 0 ; j < size_supp ; ++j)
-	for (k = 0 ; k < size_supp ; ++k)
+	for (i = 0 ; i < len_supp ; ++i)
+	for (j = 0 ; j < len_supp ; ++j)
+	for (k = 0 ; k < len_supp ; ++k)
         {
         out[i][j][k] = (in[i][j][k] >= cutoff) ? in[i][j][k] : 0. ;
         }
@@ -600,10 +622,12 @@ void shrink_support(double ***in)
     {
     int s, is, js, ks ;
     double mean_1, mean_2, c_mean_1, c_mean_2, t_mean_1, t_mean_2 ;
-    double update_err ;
+    double update_err, val ;
     mean_1 = 1. ;
     mean_2 = 0. ;
     update_err = 10. ;
+    //K-means inside spherical support to 
+    //determine number of significant voxels 
     while (update_err > 1.E-4)
         {
         c_mean_1 = c_mean_2 = 0. ;
@@ -652,10 +676,10 @@ void shrink_support(double ***in)
         val = in[is][js][ks] ;
         if (fabs(val - mean_1) < fabs(val - mean_2))
             {
-            supp_flag[i] = 1 ;
+            supp_flag[s] = 1 ;
             }
         else
-            supp_flag[i] = 0 ;
+            supp_flag[s] = 0 ;
         }
     //Extend the padding to enforce continuity?
     }
