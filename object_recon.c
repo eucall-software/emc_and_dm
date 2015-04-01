@@ -404,7 +404,9 @@ void ave_recon( double ***in )
     int mi, mj, mk ;
     int shift = 3 ;
     double cost, min_cost ;
-    
+   
+    //Scan for the translated "in"-reconstruction that is most similar
+    //to running average
     min_cost = 1E20 ;
     for (ti = -1*shift ; ti <= shift ; ++ ti)
     for (tj = -1*shift ; tj <= shift ; ++ tj)
@@ -438,6 +440,8 @@ void ave_recon( double ***in )
             }
         }
 
+    printf("min_i: %d\t min_j: %d\t min_k: %d\n", mi, mj, mk);
+    //Add translated "in"-recon most compatible to running average 
 	for (i = 0 ; i < size ; ++i)
 	for (j = 0 ; j < size ; ++j)
 	for (k = 0 ; k < size ; ++k)
