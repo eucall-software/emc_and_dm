@@ -39,7 +39,7 @@ finish_object.dat, mtf.dat, object.log
 int (*supp)[3] ;
 int *supp_flag ;
 int *ord, *beg, *end ;
-double *tempx, ***x, ***p1, ***r1, ***p2, ***mag, ***ave, ***min_state ;
+double *tempx, ***x, ***realp, ***r1, ***fourierp, ***mag, ***ave, ***min_state ;
 double *fftw_array_r ;
 fftw_complex *fftw_array_c ;
 fftw_plan forward_plan, backward_plan ; 
@@ -92,10 +92,6 @@ int main(int argc, char* argv[])
 	fprintf(fp, "size = %d    len_supp = %d    num_supp = %d\n\n", size, len_supp, num_supp) ;
 	fclose(fp) ;
 
-    // TODO: Compute translation and rotation between different constructions before merging
-    // We'll do this in a complete search over translations, then orientations.
-    // TODO: Save the lowest error file out to disk
-
     //This is the shrink-wrap cycle.
     randomize_state() ;
     fp = fopen("shrinkwrap.log", "a") ;
@@ -105,7 +101,7 @@ int main(int argc, char* argv[])
         {
         error = diff() ;
         if (i % shrink_interval) 
-            shrink_support(p2) ;
+            shrink_support(fourierp) ;
 
         fp = fopen("shrinkwrap.log", "a") ;
         fprintf(fp, "iter = %d    error = %f\n", i, error) ;
@@ -131,7 +127,7 @@ int main(int argc, char* argv[])
             if ((i > start_ave) && (error < min_error))
                 {
                 min_error = error ;
-                replace_min_recon(p2) ; 
+                replace_min_recon(fourierp) ; 
                 }
             fprintf(fp, "iter = %d    error = %f\n", i, error) ;
             }
@@ -256,9 +252,9 @@ int setup()
     
 	mag = malloc(size * sizeof(double**)) ;
 	x = malloc(size * sizeof(double**)) ;
-	p1 = malloc(size * sizeof(double**)) ;
+	realp = malloc(size * sizeof(double**)) ;
 	r1 = malloc(size * sizeof(double**)) ;
-	p2 = malloc(size * sizeof(double**)) ;
+	fourierp = malloc(size * sizeof(double**)) ;
 	ave = malloc(size * sizeof(double**)) ;
     min_state = malloc(size * sizeof(double **)) ;
 
@@ -266,9 +262,9 @@ int setup()
 		{
 		mag[i] = malloc(size * sizeof(double*)) ;
 		x[i] = malloc(size * sizeof(double*)) ;
-		p1[i] = malloc(size * sizeof(double*)) ;
+		realp[i] = malloc(size * sizeof(double*)) ;
 		r1[i] = malloc(size * sizeof(double*)) ;
-		p2[i] = malloc(size * sizeof(double*)) ;
+		fourierp[i] = malloc(size * sizeof(double*)) ;
 		ave[i] = malloc(size * sizeof(double*)) ;
 		min_state[i] = malloc(size * sizeof(double*)) ;
 		
@@ -276,9 +272,9 @@ int setup()
 			{
 			mag[i][j] = malloc((qmax + 1) * sizeof(double)) ;
 			x[i][j] = malloc(size * sizeof(double)) ;
-			p1[i][j] = malloc(size * sizeof(double)) ;
+			realp[i][j] = malloc(size * sizeof(double)) ;
 			r1[i][j] = malloc(size * sizeof(double)) ;
-			p2[i][j] = malloc(size * sizeof(double)) ;
+			fourierp[i][j] = malloc(size * sizeof(double)) ;
 			ave[i][j] = malloc(size * sizeof(double)) ;
 			min_state[i][j] = malloc(size * sizeof(double)) ;
 			}
@@ -369,26 +365,26 @@ void free_mem()
             free(min_state[i][j]) ;
 			free(mag[i][j]) ;
 			free(x[i][j]) ;
-			free(p1[i][j]) ;
+			free(realp[i][j]) ;
 			free(r1[i][j]) ;
-			free(p2[i][j]) ;
+			free(fourierp[i][j]) ;
 			free(ave[i][j]) ;
 			}
         free(min_state[i]) ;			
 		free(mag[i]) ;
 		free(x[i]) ;
-		free(p1[i]) ;
+		free(realp[i]) ;
 		free(r1[i]) ;
-		free(p2[i]) ;
+		free(fourierp[i]) ;
 		free(ave[i]) ;
 		}
 	
     free(min_state) ;
 	free(mag) ;
 	free(x) ;
-	free(p1) ;
+	free(realp) ;
 	free(r1) ;
-	free(p2) ;
+	free(fourierp) ;
 	free(ave) ;
 	
 	fftw_free(fftw_array_r) ;
@@ -401,13 +397,65 @@ void free_mem()
 	
 void ave_recon( double ***in )
 	{
-	int i, j, k ;
-	
+	//We assume that the support is non-centrosymmetric, 
+    //so we only have to check for translated reconstructions 
+    //but not inverted ones.
+    int i, j, k, ti, tj, tk, tti, ttj, ttk ;
+    int mi, mj, mk ;
+    int shift = 3 ;
+    double cost, min_cost ;
+    
+    min_cost = 1E20 ;
+    for (ti = -1*shift ; ti <= shift ; ++ ti)
+    for (tj = -1*shift ; tj <= shift ; ++ tj)
+    for (tk = -1*shift ; tk <= shift ; ++ tk)
+        {
+        cost = 0. ;
+        for (i = 0 ; i < size ; ++i)
+        for (j = 0 ; j < size ; ++j)
+        for (k = 0 ; k < size ; ++k)
+            {
+            tti = i + ti ;
+            if (tti < 0) {tti += size ;}
+            else if (tti >= size) {tti -= size ;}
+           
+            ttj = i + ti ;
+            if (ttj < 0) {ttj += size ;}
+            else if (ttj >= size) {ttj -= size ;}
+            
+            ttk = i + ti ;
+            if (ttk < 0) {ttk += size ;}
+            else if (ttk >= size) {ttk -= size ;}
+
+            cost += fabs(ave[i][j][k] - in[tti][ttj][ttk]) ;
+            }
+         if (cost < min_cost)
+            {
+            mi = ti ;
+            mj = tj ;
+            mk = tk ;
+            min_cost = cost ;
+            }
+        }
+
 	for (i = 0 ; i < size ; ++i)
 	for (j = 0 ; j < size ; ++j)
 	for (k = 0 ; k < size ; ++k)
-		ave[i][j][k] += in[i][j][k] ;
-		
+		{
+        tti = i + mi ;
+        if (tti < 0) {tti += size ;}
+        else if (tti >= size) {tti -= size ;}
+       
+        ttj = j + mj ;
+        if (ttj < 0) {ttj += size ;}
+        else if (ttj >= size) {ttj -= size ;}
+        
+        ttk = k + mk ;
+        if (ttk < 0) {ttk += size ;}
+        else if (ttk >= size) {ttk -= size ;}
+
+        ave[i][j][k] += in[mi][mj][mk] ;
+		}
 	++ave_iter ;
 	}
 	
@@ -481,30 +529,30 @@ double diff()
 	double change, error = 0. ;
 	
 
-    proj1(x, p1) ;
+    proj1(x, realp) ;
     
     double leash = 0.2;
 	for (i = 0 ; i < size ; ++i)
 	for (j = 0 ; j < size ; ++j)
 	for (k = 0 ; k < size ; ++k)
         {
-        x[i][j][k] = (1.0-leash)*x[i][j][k] + leash*p1[i][j][k] ;
+        x[i][j][k] = (1.0-leash)*x[i][j][k] + leash*realp[i][j][k] ;
         }
 
-	proj2(x, p1) ;
+	proj2(x, realp) ;
 	
 	for (i = 0 ; i < size ; ++i)
 	for (j = 0 ; j < size ; ++j)
 	for (k = 0 ; k < size ; ++k)
-		r1[i][j][k] = 2. * p1[i][j][k] - x[i][j][k] ;
+		r1[i][j][k] = 2. * realp[i][j][k] - x[i][j][k] ;
 		
-	proj1(r1, p2) ;
+	proj1(r1, fourierp) ;
 	
 	for (i = 0 ; i < size ; ++i)
 	for (j = 0 ; j < size ; ++j)
 	for (k = 0 ; k < size ; ++k)
 			{
-			change = p2[i][j][k] - p1[i][j][k] ;
+			change = fourierp[i][j][k] - realp[i][j][k] ;
 			x[i][j][k] += change ;
 			error += change * change ;
 			}
