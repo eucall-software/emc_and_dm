@@ -634,7 +634,7 @@ c = N.array([gen.qmax, gen.qmax, gen.qmax])
 f = h5py.File(outFile, "a")
 d = f["data"]
 maxIntensKey = str(max([int(xx) for xx in f["history/intensities"].keys()]))
-d["data"] = h5py.SoftLink("history/intensities/"+maxIntensKey)
+d["data"] = h5py.SoftLink("history/intensities/"+("%04d"%maxIntensKey))
 #f.create_dataset("data/angle", data=??)
 f.create_dataset("data/center", data=c)
 
