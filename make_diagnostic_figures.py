@@ -9,6 +9,7 @@ from supp_py_modules import read_results as read
 from matplotlib import pyplot as plt
 import matplotlib as M
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from mpl_toolkits.mplot3d import Axes3D
 
 def load_reference_intensites(ref_file):
     t_intens = (read.extract_final_arr_from_h5(ref_file, "/history/intensities")).astype("float")
@@ -84,6 +85,13 @@ def support_from_autocorr(auto, qmax, thr_0, thr_1, kl=1, write=True):
         fp.close()
 
     return pos_array
+
+def show_support(support):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    (x,y,z) = support.transpose()
+    ax.scatter(x, y, z, c='r', marker='s')
+    plt.show()
 
 ################################################################################
 # Options for running this program
