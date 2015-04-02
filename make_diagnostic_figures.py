@@ -55,6 +55,36 @@ def cluster_two_means(vals):
         (v0, v1)    = (v00, v11)
     return (v0, v1)
 
+def support_from_autocorr(auto, qmax, thr_0, thr_1, kl=1, write=True):
+    pos     = N.argwhere(N.abs(auto-thr_0) > N.abs(auto-thr_1))
+    pos_set = set()
+    pos_list= []
+    kerl    = range(-kl,kl+1)
+    ker     = [[i,j,k] for i in kerl for j in kerl for k in kerl]
+
+    def trun(v):
+        return int(N.ceil(0.5*v))
+    v_trun = N.vectorize(trun)
+
+    for (pi, pj, pk) in pos:
+        for (ci, cj, ck) in ker:
+            pos_set.add((pi+ci, pj+cj, pk+ck))
+    for s in pos_set:
+        pos_list.append([s[0], s[1], s[2]])
+
+    pos_array = N.array(pos_list)
+    pos_array -= [a.min() for a in pos_array.transpose()]
+    pos_array = N.array([v_trun(a) for a in pos_array])
+
+    if write:
+        fp  = open("support.dat", "w")
+        fp.write("%d %d\n"%(qmax, len(pos_array)))
+        for p in pos_array:
+            fp.write("%d %d %d\n" % (p[0], p[1], p[2]))
+        fp.close()
+
+    return pos_array
+
 ################################################################################
 # Options for running this program
 ################################################################################
@@ -160,41 +190,16 @@ if op.make_merge_imgs:
     plt.close(fig2)
 
 avg_intens = N.mean(intens_stack, axis=0)
-avg_intens.tofile("object_intensity.dat", sep = " ")
+avg_intens.tofile("object_intensity.dat", sep=" ")
 
 # Compute autocorrelation
+print "Computing autocorrelation..."
 avg_intens  = v_zero_neg(avg_intens.ravel()).reshape(avg_intens.shape)
 auto        = N.fft.fftshift(N.abs(N.fft.fftn(N.fft.ifftshift(avg_intens))))
+print "Using 2-means clustering to determine significant voxels in autocorrelation..."
 (a_0, a_1)  = cluster_two_means(auto.ravel())
-
-def support_from_autocorr(auto, qmax, thr_0, thr_1, kl=1, write=True):
-    pos     = N.argwhere(N.abs(auto-thr_0) > N.abs(auto-thr_1))
-    pos_set = set()
-    pos_list= []
-    kerl    = range(-kl,kl+1)
-    ker     = [[i,j,k] for i in kerl for j in kerl for k in kerl]
-    def trun(v):
-        return int(N.ceil(0.5*v))
-    v_trun = N.vectorize(trun)
-
-    for (pi, pj, pk) in pos:
-        for (ci, cj, ck) in ker:
-            pos_set.add((pi+ci, pj+cj, pk+ck))
-    for s in pos_set:
-        pos_list.append([s[0], s[1], s[2]])
-
-    pos_array = N.array(pos_list)
-    pos_array -= [a.min() for a in pos_array.transpose()]
-    pos_array = N.array([v_trun(a) for a in pos_array])
-
-    if write:
-        fp  = open("support.dat", "w")
-        fp.write("%d %d\n"%(qmax, len(pos_array)))
-        for p in pos_array:
-            fp.write("%d %d %d\n" % (p[0], p[1], p[2]))
-        fp.close()
-
-    return pos_array
+print "Determining support from autocorrelation (will write to support.dat by default)..."
+support     = support_from_autocorr(auto, qmax, a_0, a_1)
 
 #def create_supp_panel():
 
