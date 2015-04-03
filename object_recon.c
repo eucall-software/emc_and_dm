@@ -37,18 +37,21 @@ finish_object.dat, mtf.dat, object.log
 #define MTF 20
 
 int (*supp)[3] ;
+int ***dense_supp ;
 int *supp_flag ;
 int *ord, *beg, *end ;
-double *tempx, ***x, ***realp, ***r1, ***fourierp, ***mag, ***ave, ***min_state ;
+double *tempx, ***x, ***realp, ***r1, ***fourierp, ***mag, ***ave, ***ave_min, ***min_state ;
 double *fftw_array_r ;
 fftw_complex *fftw_array_c ;
 fftw_plan forward_plan, backward_plan ; 
 
-int size, qmax, len_supp, num_supp, shrink_interval, ave_iter = 0 ;
+int size, qmax, len_supp, num_supp, shrink_interval ;
+double ave_iter = 0., ave_min_iter = 0. ;
 
 void print_recon() ;
 void print_mtf() ;
 void ave_recon( double*** ) ;
+void ave_min_recon( double*** ) ;
 int setup() ;
 void free_mem() ;
 double diff() ;
@@ -62,22 +65,24 @@ void proj2( double***, double*** ) ;
 
 int main(int argc, char* argv[])
 	{
-	int shrinkwrap_iter, num_trials, iter, start_ave, i, t;
+	int shrinkwrap_iter, shrinkwrap_start_ave, num_trials, iter, start_ave, i, t;
 	double error, min_error ;
 	FILE *fp ;
 	
-	if ( argc == 6 )
+	if ( argc == 7 )
 		{
-        shrinkwrap_iter = atoi(argv[1]) ;
-        shrink_interval = atoi(argv[2]) ;
-        num_trials      = atoi(argv[3]) ;
-		iter            = atoi(argv[4]) ;
-		start_ave       = atoi(argv[5]) ;
+        shrinkwrap_iter 	= atoi(argv[1]) ;
+        shrinkwrap_start_ave= atoi(argv[2]) ;
+        shrink_interval 	= atoi(argv[3]) ;
+        num_trials      	= atoi(argv[4]) ;
+		iter            	= atoi(argv[5]) ;
+		start_ave       	= atoi(argv[6]) ;
 		}
 	else
 		{
 		printf("expected five arguments:\n" 
         "\tshrinkwrap_iterations\n"
+        "\tshrinkwrap_start_ave\n"
         "\tshrinkwrap_intervals\n"
         "\tnum_trials\n"
         "\tnum_iter\n"
@@ -97,12 +102,16 @@ int main(int argc, char* argv[])
     fp = fopen("shrinkwrap.log", "a") ;
     fprintf(fp, "\nStarting support shrink-wrap cycle.\n") ;
     fclose(fp) ;
+	ave_iter = 0. ;
     for (i = 1 ; i <= shrinkwrap_iter ; ++i)
         {
         error = diff() ;
-        if (i % shrink_interval) 
-            shrink_support(fourierp) ;
-
+		if (i > shrinkwrap_start_ave)
+			{
+			ave_recon(fourierp) ;
+        	if ((i % shrink_interval == 0) && (i > 2*shrinkwrap_start_ave)) 
+            	shrink_support(ave) ;
+			}
         fp = fopen("shrinkwrap.log", "a") ;
         fprintf(fp, "iter = %d    error = %f\n", i, error) ;
         fclose(fp) ;
@@ -132,7 +141,7 @@ int main(int argc, char* argv[])
             fprintf(fp, "iter = %d    error = %f\n", i, error) ;
             }
         fclose(fp) ;
-        ave_recon(min_state) ;
+        ave_min_recon(min_state) ;
         print_min_recon(t) ; 	
         }
     print_recon() ;
@@ -174,7 +183,7 @@ void print_recon()
 	for (j = 0 ; j < len_supp ; ++j)
 		{
 		for (k = 0 ; k < len_supp ; ++k)
-			fprintf(fp, "%f ", ave[i][j][k] / ave_iter) ;
+			fprintf(fp, "%f ", ave_min[i][j][k] / ave_min_iter) ;
 			
 		fprintf(fp, "\n") ;
 		}
@@ -237,7 +246,23 @@ int setup()
 	++len_supp ;
 
 	fclose(fp) ;
-	
+
+	dense_supp = malloc(len_supp * sizeof(*dense_supp)) ;
+	for (i = 0 ; i < len_supp ; i++)
+		{
+		dense_supp[i]  = malloc(len_supp * sizeof(**dense_supp)) ;
+		for (j = 0 ; j < len_supp ; j++)
+			dense_supp[i][j] = malloc(len_supp * sizeof(***dense_supp)) ;
+		}
+
+	for (i = 0 ; i < len_supp ; i++)
+	for (j = 0 ; j < len_supp ; j++)
+	for (k = 0 ; k < len_supp ; k++)
+		dense_supp[i][j][k] = 0 ;
+
+	for (s = 0 ; s < num_supp ; ++s)
+		dense_supp[supp[s][0]][supp[s][1]][supp[s][2]] = 1 ;
+
 	fp = fopen("object_intensity.dat", "r") ;
 	if (!fp)
 		{
@@ -256,6 +281,7 @@ int setup()
 	r1 = malloc(size * sizeof(double**)) ;
 	fourierp = malloc(size * sizeof(double**)) ;
 	ave = malloc(size * sizeof(double**)) ;
+	ave_min = malloc(size * sizeof(double**)) ;
     min_state = malloc(size * sizeof(double **)) ;
 
 	for (i = 0 ; i < size ; ++i)
@@ -266,6 +292,7 @@ int setup()
 		r1[i] = malloc(size * sizeof(double*)) ;
 		fourierp[i] = malloc(size * sizeof(double*)) ;
 		ave[i] = malloc(size * sizeof(double*)) ;
+		ave_min[i] = malloc(size * sizeof(double*)) ;
 		min_state[i] = malloc(size * sizeof(double*)) ;
 		
 		for (j = 0 ; j < size ; ++j)
@@ -276,6 +303,7 @@ int setup()
 			r1[i][j] = malloc(size * sizeof(double)) ;
 			fourierp[i][j] = malloc(size * sizeof(double)) ;
 			ave[i][j] = malloc(size * sizeof(double)) ;
+			ave_min[i][j] = malloc(size * sizeof(double)) ;
 			min_state[i][j] = malloc(size * sizeof(double)) ;
 			}
 		}
@@ -311,6 +339,7 @@ int setup()
 		{
 		x[i][j][k] = 0. ;
 		ave[i][j][k] = 0. ;
+		ave_min[i][j][k] = 0. ;
 		}
 		
 	fp = fopen("start_object.dat", "r") ;
@@ -357,7 +386,15 @@ void free_mem()
     free(beg) ;
     free(end) ;
     free(tempx) ;
-	
+
+	for (i = 0 ; i < len_supp ; ++i)
+		{
+		for (j = 0 ; j < len_supp ; ++j)
+			free(dense_supp[i][j]) ;
+		free(dense_supp[i]) ;
+		}
+	free(dense_supp) ;
+
 	for (i = 0 ; i < size ; ++i)
 		{
 		for (j = 0 ; j < size ; ++j)
@@ -369,6 +406,7 @@ void free_mem()
 			free(r1[i][j]) ;
 			free(fourierp[i][j]) ;
 			free(ave[i][j]) ;
+			free(ave_min[i][j]) ;
 			}
         free(min_state[i]) ;			
 		free(mag[i]) ;
@@ -377,6 +415,7 @@ void free_mem()
 		free(r1[i]) ;
 		free(fourierp[i]) ;
 		free(ave[i]) ;
+		free(ave_min[i]) ;
 		}
 	
     free(min_state) ;
@@ -386,6 +425,7 @@ void free_mem()
 	free(r1) ;
 	free(fourierp) ;
 	free(ave) ;
+	free(ave_min) ;
 	
 	fftw_free(fftw_array_r) ;
 	fftw_free(fftw_array_c) ;
@@ -440,6 +480,73 @@ void ave_recon( double ***in )
             }
         }
 
+	for (i = 0 ; i < size ; ++i)
+	for (j = 0 ; j < size ; ++j)
+	for (k = 0 ; k < size ; ++k)
+		{
+        tti = i + mi ;
+        if (tti < 0) {tti += size ;}
+        else if (tti >= size) {tti -= size ;}
+       
+        ttj = j + mj ;
+        if (ttj < 0) {ttj += size ;}
+        else if (ttj >= size) {ttj -= size ;}
+        
+        ttk = k + mk ;
+        if (ttk < 0) {ttk += size ;}
+        else if (ttk >= size) {ttk -= size ;}
+
+        ave[i][j][k] += in[tti][ttj][ttk] ;
+		}
+	++ave_iter ;
+	}
+	
+void ave_min_recon( double ***in )
+	{
+	//We assume that the support is non-centrosymmetric, 
+    //so we only have to check for translated reconstructions 
+    //but not inverted ones.
+    int i, j, k, ti, tj, tk, tti, ttj, ttk ;
+    int mi, mj, mk ;
+    int shift = 3 ;
+    double cost, min_cost ;
+   
+    //Scan for the translated "in"-reconstruction that is most similar
+    //to running average
+    min_cost = 1E20 ;
+	printf("Trying the translations...\n") ;
+    for (ti = -1*shift ; ti <= shift ; ++ ti)
+    for (tj = -1*shift ; tj <= shift ; ++ tj)
+    for (tk = -1*shift ; tk <= shift ; ++ tk)
+        {
+        cost = 0. ;
+        for (i = 0 ; i < size ; ++i)
+        for (j = 0 ; j < size ; ++j)
+        for (k = 0 ; k < size ; ++k)
+            {
+            tti = i + ti ;
+            if (tti < 0) {tti += size ;}
+            else if (tti >= size) {tti -= size ;}
+           
+            ttj = i + ti ;
+            if (ttj < 0) {ttj += size ;}
+            else if (ttj >= size) {ttj -= size ;}
+            
+            ttk = i + ti ;
+            if (ttk < 0) {ttk += size ;}
+            else if (ttk >= size) {ttk -= size ;}
+
+            cost += fabs(ave[i][j][k] - in[tti][ttj][ttk]) ;
+            }
+         if (cost < min_cost)
+            {
+            mi = ti ;
+            mj = tj ;
+            mk = tk ;
+            min_cost = cost ;
+            }
+        }
+
     printf("min_i: %d\t min_j: %d\t min_k: %d\n", mi, mj, mk);
     //Add translated "in"-recon most compatible to running average 
 	for (i = 0 ; i < size ; ++i)
@@ -458,11 +565,10 @@ void ave_recon( double ***in )
         if (ttk < 0) {ttk += size ;}
         else if (ttk >= size) {ttk -= size ;}
 
-        ave[i][j][k] += in[mi][mj][mk] ;
+        ave_min[i][j][k] += in[tti][ttj][ttk] ;
 		}
-	++ave_iter ;
+	++ave_min_iter ;
 	}
-	
 
 void replace_min_recon( double ***in )
 	{
@@ -471,7 +577,7 @@ void replace_min_recon( double ***in )
 	for (i = 0 ; i < size ; ++i)
 	for (j = 0 ; j < size ; ++j)
 	for (k = 0 ; k < size ; ++k)
-		min_state[i][j][k] += in[i][j][k] ;
+		min_state[i][j][k] = in[i][j][k] ;
 	}
 
 
@@ -609,7 +715,80 @@ void proj2( double ***in, double ***out )
 	for (k = 0 ; k < size ; ++k)
         out[i][j][k] = 0. ;
 
-	/*
+	for (i = 0 ; i < len_supp ; ++i)
+	for (j = 0 ; j < len_supp ; ++j)
+	for (k = 0 ; k < len_supp ; ++k)
+		{
+		val = in[i][j][k] ;
+		if (val < 0. || dense_supp[i][j][k] == 0)
+			continue ;
+		out[i][j][k] = val ;
+		}
+	}
+
+void shrink_support(double ***in)
+	{
+	int i, j, k, is, js, ks, kerl=1 ;
+	double val, avg, avg_c, max_v, min_v, cutoff ;
+	double dyn_rng = 0.02 ;
+
+	avg 	= 0. ;
+	avg_c 	= 0. ;
+	max_v 	= 0. ;
+	min_v 	= 1.E20 ;
+
+	for (i = 0 ; i < len_supp ; ++i)
+	for (j = 0 ; j < len_supp ; ++j)
+	for (k = 0 ; k < len_supp ; ++k)
+		{
+		val = in[i][j][k] ;
+		if (val < 0. || dense_supp[i][j][k] == 0)
+			continue ;
+		avg 	+= val ;
+		avg_c 	+= 1. ;
+		if(val > max_v) max_v = val ;
+		if(val < min_v) min_v = val ;
+		}
+	avg 	= (avg_c > 0.) ? avg/avg_c : 0. ;
+	cutoff 	= min_v + (max_v - min_v)*dyn_rng ;
+
+	for (i = 0 ; i < len_supp ; ++i)
+	for (j = 0 ; j < len_supp ; ++j)
+	for (k = 0 ; k < len_supp ; ++k)
+		{
+		dense_supp[i][j][k] = 0 ;
+		val = in[i][j][k] ;
+		if (val >= cutoff)
+			{
+			dense_supp[i][j][k] = 1 ;
+			for (is = -1*kerl ; is <= kerl ; ++is)
+			for (js = -1*kerl ; js <= kerl ; ++js)
+			for (ks = -1*kerl ; ks <= kerl ; ++ks)
+				if ((is>=0 && is<len_supp) && (js>=0 && js<len_supp) && (ks>=0 && ks<len_supp))
+					{dense_supp[is][js][ks] = 1 ;}
+			}
+		}
+	
+	avg_c = 0. ;
+	for (i = 0 ; i < len_supp ; ++i)
+	for (j = 0 ; j < len_supp ; ++j)
+	for (k = 0 ; k < len_supp ; ++k)
+		avg_c += dense_supp[i][j][k] ;
+
+	printf("Number of support voxels: %d\n", (int) avg_c) ;
+	}
+
+/*
+void proj2_with_volume_constraint( double ***in, double ***out )
+	{
+	int i, j, k, is, js, ks, s, pivPos, L, R ;
+	double val, cutoff, piv, b, c ;
+
+	for (i = 0 ; i < size ; ++i)
+	for (j = 0 ; j < size ; ++j)
+	for (k = 0 ; k < size ; ++k)
+        out[i][j][k] = 0. ;
+
 	for (i = 0 ; i < len_supp ; ++i)
 	for (j = 0 ; j < len_supp ; ++j)
 	for (k = 0 ; k < len_supp ; ++k)
@@ -617,23 +796,7 @@ void proj2( double ***in, double ***out )
         ord[(len_supp * i + j) * len_supp + k] = (len_supp * i + j) * len_supp + k;
         tempx[(len_supp * i + j) * len_supp + k] = in[i][j][k] ;
         }
-	*/
-     
-	for (s = 0 ; s < num_supp ; ++s)
-		{
-		is = supp[s][0] ;
-		js = supp[s][1] ;
-		ks = supp[s][2] ;
-		
-		val = in[is][js][ks] ;
-		
-		if (val < 0. || supp_flag[s] == 0)
-			continue ;
-			
-		out[is][js][ks] = val ;
-		}
-    
-    /*
+	
     i = 0 ; beg[0] = 0 ; end[0] = len_supp*len_supp*len_supp ;
 	while (i >= 0) 
 		{
@@ -666,16 +829,16 @@ void proj2( double ***in, double ***out )
         {
         out[i][j][k] = (in[i][j][k] >= cutoff) ? in[i][j][k] : 0. ;
         }
-    */
 	}
+*/
 
-
+/*
 void shrink_support(double ***in)
     {
     int s, is, js, ks ;
     double mean_1, mean_2, c_mean_1, c_mean_2, t_mean_1, t_mean_2 ;
-    double update_err, val ;
-    mean_1 = 1. ;
+    double update_err, val, tot_support ;
+    mean_1 = .1 ;
     mean_2 = 0. ;
     update_err = 10. ;
     //K-means inside spherical support to 
@@ -701,8 +864,10 @@ void shrink_support(double ***in)
                   c_mean_2 += 1. ;
                   }
             }
-        t_mean_1 /= c_mean_1 ;
-        t_mean_2 /= c_mean_2 ;
+		if (c_mean_1 > 0.)
+        	t_mean_1 /= c_mean_1 ;
+		if (c_mean_2 > 0.)
+        	t_mean_2 /= c_mean_2 ;
         update_err = fabs(t_mean_1 - mean_1) + fabs(t_mean_2 - mean_2) ;
         mean_1 = t_mean_1 ;
         mean_2 = t_mean_2 ;
@@ -720,6 +885,7 @@ void shrink_support(double ***in)
         }
 
     //Set support flag based on mean partitions
+	tot_support = 0. ;
     for (s = 0 ; s < num_supp ; s++)
         {
         is = supp[s][0] ;
@@ -729,11 +895,13 @@ void shrink_support(double ***in)
         if (fabs(val - mean_1) < fabs(val - mean_2))
             {
             supp_flag[s] = 1 ;
+			tot_support += 1. ;
             }
         else
             supp_flag[s] = 0 ;
         }
+	printf("%lf support pixels, %lf,\t%lf\n", tot_support, mean_1, mean_2) ;	
     //Extend the padding to enforce continuity?
     }
-    
+*/  
 

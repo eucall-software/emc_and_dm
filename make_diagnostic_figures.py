@@ -15,7 +15,7 @@ def load_reference_intensites(ref_file):
     t_intens = (read.extract_final_arr_from_h5(ref_file, "/history/intensities")).astype("float")
     intens_len = len(t_intens)
     qmax    = intens_len/2
-    (q_low, q_high) = (6, int(0.4*qmax))
+    (q_low, q_high) = (15, int(0.9*qmax))
     qRange1 = N.arange(-q_high, q_high + 1)
     qRange2 = N.arange(-qmax, qmax + 1)
     qPos0   = N.array([[i,j,0] for i in qRange1 for j in qRange1 if N.sqrt(i*i+j*j) > q_low]).astype("float")
@@ -118,27 +118,25 @@ num_dirs        = len(dirs)
 intens_stack    = N.zeros((num_dirs, intens_len, intens_len, intens_len))
 intens_stack[0] = t_intens.copy()
 dir_ct          = 1
+i_off           = 1.E-7
 tt_intens       = (t_intens>0.)*t_intens
 tt_intens       /= tt_intens.max()
-(rows, cols)    = (3, num_dirs/3+1)
-for r in range(rows):
-    for c in range(cols):
-        if dir_ct >= num_dirs:
-            break
-        dir         = dirs[dir_ct]
-        t0          = time.time()
-        curr_file   = os.path.join(dir, op.tmp_fn)
-        c_intens    = (read.extract_final_arr_from_h5(curr_file, "/history/intensities")).astype("float")
-        cc_intens   = (c_intens>0.)*c_intens
-        cc_intens   /= cc_intens.max()
-        scores      = rI.orient_two_intensities(tt_intens.ravel(), cc_intens.ravel(), qPos.ravel(), quats.ravel(), intens_len)
-        ml_quat     = quats[(scores.argsort())[0]]
-        out_intens  = N.zeros_like(cc_intens)
-        rI.interp_intensities(c_intens.ravel(), out_intens.ravel(), qPos_full.ravel(), ml_quat, intens_len)
-        t1          = time.time()
-        intens_stack[dir_ct] = out_intens.copy()
-        print "Done orienting intensity %d of %d. Took %lf s."%(dir_ct, num_dirs, t1-t0)
-        dir_ct      += 1
+tt_intens       = N.abs(N.log(tt_intens+i_off))
+for dir_ct in range(num_dirs):
+    dir         = dirs[dir_ct]
+    t0          = time.time()
+    curr_file   = os.path.join(dir, op.tmp_fn)
+    c_intens    = (read.extract_final_arr_from_h5(curr_file, "/history/intensities")).astype("float")
+    cc_intens   = (c_intens>0.)*c_intens
+    cc_intens   /= cc_intens.max()
+    cc_intens   = N.abs(N.log(cc_intens+i_off))
+    scores      = rI.orient_two_intensities(tt_intens.ravel(), cc_intens.ravel(), qPos.ravel(), quats.ravel(), intens_len)
+    ml_quat     = quats[(scores.argsort())[0]]
+    out_intens  = N.zeros_like(cc_intens)
+    rI.interp_intensities(c_intens.ravel(), out_intens.ravel(), qPos_full.ravel(), ml_quat, intens_len)
+    t1          = time.time()
+    intens_stack[dir_ct] = out_intens.copy()
+    print "Done orienting intensity %d of %d. Took %lf s."%(dir_ct, num_dirs, t1-t0)
 
 # Make diagnostic images from individual reconstructions
 # only if make_diag_imgs option is true
@@ -160,9 +158,9 @@ if op.make_diag_imgs:
 # Make images from merging individual reconstructions
 # only if make_merge_imgs option is true
 if op.make_merge_imgs:
-    (rows, cols)= (3, num_dirs/3+1)
+    (rows, cols)= (3, max([2,num_dirs/3+1]))
     M.rcParams.update({'font.size': 13})
-    fig, ax     = plt.subplots(3, num_dirs/3 + 1, sharex=True, sharey=True, figsize=(2.5*cols, 2.5*rows))
+    fig, ax     = plt.subplots(rows, cols, sharex=True, sharey=True, figsize=(2.5*cols, 2.5*rows))
     fig.subplots_adjust(wspace=0.01)
     stack_ct    = 0
     for r in range(rows):
@@ -198,6 +196,7 @@ if op.make_merge_imgs:
     plt.close(fig2)
 
 avg_intens = N.mean(intens_stack, axis=0)
+avg_intens = t_intens
 avg_intens.tofile("object_intensity.dat", sep=" ")
 
 # Compute autocorrelation
@@ -209,7 +208,6 @@ print "Using 2-means clustering to determine significant voxels in autocorrelati
 print "Determining support from autocorrelation (will write to support.dat by default)..."
 support     = support_from_autocorr(auto, qmax, a_0, a_1)
 
-#def create_supp_panel():
 
 # Write output to h5 file
 # Somehow roll this into runPhasing.py
