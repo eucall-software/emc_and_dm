@@ -1,6 +1,11 @@
 #!/bin/bash
-SRC=/mnt/cbis/images/duaneloh/S2E/Src/
-TMP=/mnt/cbis/images/duaneloh/S2E/tmp/kahuna_9fs/
-INPUT=/mnt/cbis/images/duaneloh/S2E/sim_5kev_9fs_35_2NIP_EMC/diffr/ 
+SRC=/mnt/cbis/images/duaneloh/S2E/Src_kane/
+TMP=/mnt/cbis/images/duaneloh/S2E/tmp/kane_30fs_noCompton/
+INPUT=/mnt/cbis/images/duaneloh/S2E/sim_5kev_30fs_35_2NIP_EMC_noCompton/diffr/ 
 
-nohup python2.7 runEMC.py -s $SRC -T $TMP -i $INPUT &
+SLEEPDUR=60
+for i in `seq 1 5`;
+do
+	nohup python2.7 runEMC.py -s $SRC -T $TMP -i $INPUT &
+	sleep $SLEEPDUR 
+done
