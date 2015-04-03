@@ -80,7 +80,7 @@ int main(int argc, char* argv[])
 		}
 	else
 		{
-		printf("expected five arguments:\n" 
+		printf("expected six arguments:\n" 
         "\tshrinkwrap_iterations\n"
         "\tshrinkwrap_start_ave\n"
         "\tshrinkwrap_intervals\n"
@@ -440,7 +440,7 @@ void ave_recon( double ***in )
     //but not inverted ones.
     int i, j, k, ti, tj, tk, tti, ttj, ttk ;
     int mi, mj, mk ;
-    int shift = 3 ;
+    int shift = 1 ;
     double cost, min_cost ;
    
     //Scan for the translated "in"-reconstruction that is most similar
@@ -459,11 +459,11 @@ void ave_recon( double ***in )
             if (tti < 0) {tti += size ;}
             else if (tti >= size) {tti -= size ;}
            
-            ttj = i + ti ;
+            ttj = i + tj ;
             if (ttj < 0) {ttj += size ;}
             else if (ttj >= size) {ttj -= size ;}
             
-            ttk = i + ti ;
+            ttk = i + tk ;
             if (ttk < 0) {ttk += size ;}
             else if (ttk >= size) {ttk -= size ;}
 
@@ -506,7 +506,7 @@ void ave_min_recon( double ***in )
     //but not inverted ones.
     int i, j, k, ti, tj, tk, tti, ttj, ttk ;
     int mi, mj, mk ;
-    int shift = 3 ;
+    int shift = 1 ;
     double cost, min_cost ;
    
     //Scan for the translated "in"-reconstruction that is most similar
@@ -526,11 +526,11 @@ void ave_min_recon( double ***in )
             if (tti < 0) {tti += size ;}
             else if (tti >= size) {tti -= size ;}
            
-            ttj = i + ti ;
+            ttj = i + tj ;
             if (ttj < 0) {ttj += size ;}
             else if (ttj >= size) {ttj -= size ;}
             
-            ttk = i + ti ;
+            ttk = i + tk ;
             if (ttk < 0) {ttk += size ;}
             else if (ttk >= size) {ttk -= size ;}
 
@@ -728,7 +728,7 @@ void shrink_support(double ***in)
 	{
 	int i, j, k, is, js, ks, kerl=1 ;
 	double val, avg, avg_c, max_v, min_v, cutoff ;
-	double dyn_rng = 0.02 ;
+	double dyn_rng = 0.01 ;
 
 	avg 	= 0. ;
 	avg_c 	= 0. ;
@@ -748,7 +748,7 @@ void shrink_support(double ***in)
 		if(val < min_v) min_v = val ;
 		}
 	avg 	= (avg_c > 0.) ? avg/avg_c : 0. ;
-	cutoff 	= min_v + (max_v - min_v)*dyn_rng ;
+	cutoff 	= (max_v)*dyn_rng ;
 
 	for (i = 0 ; i < len_supp ; ++i)
 	for (j = 0 ; j < len_supp ; ++j)
