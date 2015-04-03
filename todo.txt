@@ -1,5 +1,27 @@
 . [sync_to_bastion] Add compile_c_files to DESY repo. 
-. [make_diagnostic_figures.py] Simplify existing viewRecon functions into io.py
-or show.py and call these functions instead.
-. [orient>>>.h5]
-. Rename intermediate directories to EMC_*
+. Compilation should include Cython compilation.
+
+============================================================
+EMC related.
+============================================================
+= Decided that phasing should be done on individual intensities, and not the merged copy because we don't know if the merged copy maximizes the log-likelihood of the data.
+. Rename intermediate directories to recon_*
+. Start_orient should be where the parameters are setup.
+
+Fixes. Re-soft-link intensities?
+
+============================================================
+Phasing related.
+============================================================
+. Write a simple function to parse object_recon.log, and plot its error.
+. Have the leash parameter in modified DM as a user input.
+. Reconstruction within individual run_recon folders. 
+. Phasing.py should live within each EMC folder - this is used to produce a single average structure.
+. What should runDM.py do?
+    - Define an initial support, and keep that.
+    - Watch and loop over results from object_recon, writing these to file.
+        - Start recon. Generate object_recon.log. Generate min_state. Generate_output for support shrinking. 
+. Phasing
+. Debug phasing
+    - the averaged Fourier projection seems "squished" to the side of the support. Could be the support projectioin that is problematic. 
+    - shrinkwrapping of support doesn't seem repeatable from different initial runs.

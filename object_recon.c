@@ -217,8 +217,6 @@ int setup()
 	double intens ;
 	FILE *fp ;
 
-    //TODO: What is the new support input?
-    //Spherical support is most suitable
 	fp = fopen("support.dat", "r") ;
 	if (!fp)
 		{
