@@ -40,24 +40,26 @@ int (*supp)[3] ;
 int ***dense_supp ;
 int *supp_flag ;
 int *ord, *beg, *end ;
-double *tempx, ***x, ***realp, ***r1, ***fourierp, ***mag, ***ave, ***ave_min, ***min_state ;
+double *tempx, ***x, ***realp, ***r1, ***fourierp, ***mag, ***t_ave, ***gl_ave, ***running_ave ;
 double *fftw_array_r ;
 fftw_complex *fftw_array_c ;
 fftw_plan forward_plan, backward_plan ; 
 
 int size, qmax, len_supp, num_supp, shrink_interval ;
-double ave_iter = 0., ave_min_iter = 0. ;
+double t_ave_count = 0., gl_ave_count = 0. ;
 
 void print_recon() ;
 void print_mtf() ;
-void ave_recon( double*** ) ;
-void ave_min_recon( double*** ) ;
+void add_to_t_ave( double*** ) ;
+void add_to_gl_ave( double*** ) ;
 int setup() ;
 void free_mem() ;
 double diff() ;
 void randomize_state() ;
+void reset_support() ;
+void reset_average() ;
 void shrink_support(double ***) ;
-void replace_min_recon(double ***) ;
+void add_running_ave(double ***) ;
 void print_min_recon(int) ;
 void proj1( double***, double*** ) ;
 void proj2( double***, double*** ) ;
@@ -99,18 +101,19 @@ int main(int argc, char* argv[])
 
     //This is the shrink-wrap cycle.
     randomize_state() ;
+    reset_support() ;
     fp = fopen("shrinkwrap.log", "a") ;
     fprintf(fp, "\nStarting support shrink-wrap cycle.\n") ;
     fclose(fp) ;
-	ave_iter = 0. ;
+	t_ave_count = 0. ;
     for (i = 1 ; i <= shrinkwrap_iter ; ++i)
         {
         error = diff() ;
 		if (i > shrinkwrap_start_ave)
 			{
-			ave_recon(fourierp) ;
+			add_to_t_ave(fourierp) ;
         	if ((i % shrink_interval == 0) && (i > 2*shrinkwrap_start_ave)) 
-            	shrink_support(ave) ;
+            	shrink_support(t_ave) ;
 			}
         fp = fopen("shrinkwrap.log", "a") ;
         fprintf(fp, "iter = %d    error = %f\n", i, error) ;
@@ -136,12 +139,12 @@ int main(int argc, char* argv[])
             if ((i > start_ave) && (error < min_error))
                 {
                 min_error = error ;
-                replace_min_recon(fourierp) ; 
+                add_running_ave(fourierp) ; 
                 }
             fprintf(fp, "iter = %d    error = %f\n", i, error) ;
             }
         fclose(fp) ;
-        ave_min_recon(min_state) ;
+        add_to_gl_ave(running_ave) ;
         print_min_recon(t) ; 	
         }
     print_recon() ;
@@ -172,6 +175,28 @@ void randomize_state()
         x[i][j][k] = ((double) rand()) / RAND_MAX ;
     }
 
+void reset_support()
+    {
+    int i, j, k, s ;
+	for (i = 0 ; i < len_supp ; i++)
+	for (j = 0 ; j < len_supp ; j++)
+	for (k = 0 ; k < len_supp ; k++)
+		dense_supp[i][j][k] = 0 ;
+
+	for (s = 0 ; s < num_supp ; ++s)
+		dense_supp[supp[s][0]][supp[s][1]][supp[s][2]] = 1 ;
+    }
+
+void reset_average()
+    {
+    int i, j, k ;
+	for (i = 0 ; i < size ; ++i)
+	for (j = 0 ; j < size ; ++j)
+	for (k = 0 ; k < size ; ++k)
+		t_ave[i][j][k] = 0. ;
+    }
+
+
 void print_recon()
 	{
 	FILE *fp ;
@@ -183,7 +208,7 @@ void print_recon()
 	for (j = 0 ; j < len_supp ; ++j)
 		{
 		for (k = 0 ; k < len_supp ; ++k)
-			fprintf(fp, "%f ", ave_min[i][j][k] / ave_min_iter) ;
+			fprintf(fp, "%f ", gl_ave[i][j][k] / gl_ave_count) ;
 			
 		fprintf(fp, "\n") ;
 		}
@@ -203,7 +228,7 @@ void print_min_recon(int num)
 	for (j = 0 ; j < len_supp ; ++j)
 		{
 		for (k = 0 ; k < len_supp ; ++k)
-			fprintf(fp, "%f ", min_state[i][j][k]) ;
+			fprintf(fp, "%f ", running_ave[i][j][k]) ;
 			
 		fprintf(fp, "\n") ;
 		}
@@ -278,9 +303,9 @@ int setup()
 	realp = malloc(size * sizeof(double**)) ;
 	r1 = malloc(size * sizeof(double**)) ;
 	fourierp = malloc(size * sizeof(double**)) ;
-	ave = malloc(size * sizeof(double**)) ;
-	ave_min = malloc(size * sizeof(double**)) ;
-    min_state = malloc(size * sizeof(double **)) ;
+	t_ave = malloc(size * sizeof(double**)) ;
+	gl_ave = malloc(size * sizeof(double**)) ;
+    running_ave = malloc(size * sizeof(double **)) ;
 
 	for (i = 0 ; i < size ; ++i)
 		{
@@ -289,9 +314,9 @@ int setup()
 		realp[i] = malloc(size * sizeof(double*)) ;
 		r1[i] = malloc(size * sizeof(double*)) ;
 		fourierp[i] = malloc(size * sizeof(double*)) ;
-		ave[i] = malloc(size * sizeof(double*)) ;
-		ave_min[i] = malloc(size * sizeof(double*)) ;
-		min_state[i] = malloc(size * sizeof(double*)) ;
+		t_ave[i] = malloc(size * sizeof(double*)) ;
+		gl_ave[i] = malloc(size * sizeof(double*)) ;
+		running_ave[i] = malloc(size * sizeof(double*)) ;
 		
 		for (j = 0 ; j < size ; ++j)
 			{
@@ -300,9 +325,9 @@ int setup()
 			realp[i][j] = malloc(size * sizeof(double)) ;
 			r1[i][j] = malloc(size * sizeof(double)) ;
 			fourierp[i][j] = malloc(size * sizeof(double)) ;
-			ave[i][j] = malloc(size * sizeof(double)) ;
-			ave_min[i][j] = malloc(size * sizeof(double)) ;
-			min_state[i][j] = malloc(size * sizeof(double)) ;
+			t_ave[i][j] = malloc(size * sizeof(double)) ;
+			gl_ave[i][j] = malloc(size * sizeof(double)) ;
+			running_ave[i][j] = malloc(size * sizeof(double)) ;
 			}
 		}
 		
@@ -336,8 +361,8 @@ int setup()
 	for (k = 0 ; k < size ; ++k)
 		{
 		x[i][j][k] = 0. ;
-		ave[i][j][k] = 0. ;
-		ave_min[i][j][k] = 0. ;
+		t_ave[i][j][k] = 0. ;
+		gl_ave[i][j][k] = 0. ;
 		}
 		
 	fp = fopen("start_object.dat", "r") ;
@@ -397,33 +422,33 @@ void free_mem()
 		{
 		for (j = 0 ; j < size ; ++j)
 			{
-            free(min_state[i][j]) ;
+            free(running_ave[i][j]) ;
 			free(mag[i][j]) ;
 			free(x[i][j]) ;
 			free(realp[i][j]) ;
 			free(r1[i][j]) ;
 			free(fourierp[i][j]) ;
-			free(ave[i][j]) ;
-			free(ave_min[i][j]) ;
+			free(t_ave[i][j]) ;
+			free(gl_ave[i][j]) ;
 			}
-        free(min_state[i]) ;			
+        free(running_ave[i]) ;			
 		free(mag[i]) ;
 		free(x[i]) ;
 		free(realp[i]) ;
 		free(r1[i]) ;
 		free(fourierp[i]) ;
-		free(ave[i]) ;
-		free(ave_min[i]) ;
+		free(t_ave[i]) ;
+		free(gl_ave[i]) ;
 		}
 	
-    free(min_state) ;
+    free(running_ave) ;
 	free(mag) ;
 	free(x) ;
 	free(realp) ;
 	free(r1) ;
 	free(fourierp) ;
-	free(ave) ;
-	free(ave_min) ;
+	free(t_ave) ;
+	free(gl_ave) ;
 	
 	fftw_free(fftw_array_r) ;
 	fftw_free(fftw_array_c) ;
@@ -433,7 +458,7 @@ void free_mem()
 	}
 	
 	
-void ave_recon( double ***in )
+void add_to_t_ave( double ***in )
 	{
 	//We assume that the support is non-centrosymmetric, 
     //so we only have to check for translated reconstructions 
@@ -445,39 +470,42 @@ void ave_recon( double ***in )
    
     //Scan for the translated "in"-reconstruction that is most similar
     //to running average
-    min_cost = 1E20 ;
-    for (ti = -1*shift ; ti <= shift ; ++ ti)
-    for (tj = -1*shift ; tj <= shift ; ++ tj)
-    for (tk = -1*shift ; tk <= shift ; ++ tk)
+    mi = mj = mk = 0 ;
+    if(t_ave_count > 0.)
         {
-        cost = 0. ;
-        for (i = 0 ; i < len_supp ; ++i)
-        for (j = 0 ; j < len_supp ; ++j)
-        for (k = 0 ; k < len_supp ; ++k)
+        min_cost = 1E20 ;
+        for (ti = -1*shift ; ti <= shift ; ++ ti)
+        for (tj = -1*shift ; tj <= shift ; ++ tj)
+        for (tk = -1*shift ; tk <= shift ; ++ tk)
             {
-            tti = i + ti ;
-            if (tti < 0) {tti += size ;}
-            else if (tti >= size) {tti -= size ;}
-           
-            ttj = i + tj ;
-            if (ttj < 0) {ttj += size ;}
-            else if (ttj >= size) {ttj -= size ;}
-            
-            ttk = i + tk ;
-            if (ttk < 0) {ttk += size ;}
-            else if (ttk >= size) {ttk -= size ;}
+            cost = 0. ;
+            for (i = 0 ; i < len_supp ; ++i)
+            for (j = 0 ; j < len_supp ; ++j)
+            for (k = 0 ; k < len_supp ; ++k)
+                {
+                tti = i + ti ;
+                if (tti < 0) {tti += size ;}
+                else if (tti >= size) {tti -= size ;}
+               
+                ttj = i + tj ;
+                if (ttj < 0) {ttj += size ;}
+                else if (ttj >= size) {ttj -= size ;}
+                
+                ttk = i + tk ;
+                if (ttk < 0) {ttk += size ;}
+                else if (ttk >= size) {ttk -= size ;}
 
-            cost += fabs(ave[i][j][k] - in[tti][ttj][ttk]) ;
-            }
-         if (cost < min_cost)
-            {
-            mi = ti ;
-            mj = tj ;
-            mk = tk ;
-            min_cost = cost ;
+                cost += fabs(t_ave[i][j][k] - in[tti][ttj][ttk]) ;
+                }
+             if (cost < min_cost)
+                {
+                mi = ti ;
+                mj = tj ;
+                mk = tk ;
+                min_cost = cost ;
+                }
             }
         }
-
 	for (i = 0 ; i < size ; ++i)
 	for (j = 0 ; j < size ; ++j)
 	for (k = 0 ; k < size ; ++k)
@@ -494,12 +522,12 @@ void ave_recon( double ***in )
         if (ttk < 0) {ttk += size ;}
         else if (ttk >= size) {ttk -= size ;}
 
-        ave[i][j][k] += in[tti][ttj][ttk] ;
+        t_ave[i][j][k] += in[tti][ttj][ttk] ;
 		}
-	++ave_iter ;
+	++t_ave_count ;
 	}
 	
-void ave_min_recon( double ***in )
+void add_to_gl_ave( double ***in )
 	{
 	//We assume that the support is non-centrosymmetric, 
     //so we only have to check for translated reconstructions 
@@ -512,36 +540,40 @@ void ave_min_recon( double ***in )
     //Scan for the translated "in"-reconstruction that is most similar
     //to running average
     min_cost = 1E20 ;
-	printf("Trying the translations...\n") ;
-    for (ti = -1*shift ; ti <= shift ; ++ ti)
-    for (tj = -1*shift ; tj <= shift ; ++ tj)
-    for (tk = -1*shift ; tk <= shift ; ++ tk)
+    mi = mj = mk = 0 ;
+    if (gl_ave_count > 0.)
         {
-        cost = 0. ;
-        for (i = 0 ; i < len_supp ; ++i)
-        for (j = 0 ; j < len_supp ; ++j)
-        for (k = 0 ; k < len_supp ; ++k)
+        printf("Trying the translations...\n") ;
+        for (ti = -1*shift ; ti <= shift ; ++ ti)
+        for (tj = -1*shift ; tj <= shift ; ++ tj)
+        for (tk = -1*shift ; tk <= shift ; ++ tk)
             {
-            tti = i + ti ;
-            if (tti < 0) {tti += size ;}
-            else if (tti >= size) {tti -= size ;}
-           
-            ttj = i + tj ;
-            if (ttj < 0) {ttj += size ;}
-            else if (ttj >= size) {ttj -= size ;}
-            
-            ttk = i + tk ;
-            if (ttk < 0) {ttk += size ;}
-            else if (ttk >= size) {ttk -= size ;}
+            cost = 0. ;
+            for (i = 0 ; i < len_supp ; ++i)
+            for (j = 0 ; j < len_supp ; ++j)
+            for (k = 0 ; k < len_supp ; ++k)
+                {
+                tti = i + ti ;
+                if (tti < 0) {tti += size ;}
+                else if (tti >= size) {tti -= size ;}
+               
+                ttj = i + tj ;
+                if (ttj < 0) {ttj += size ;}
+                else if (ttj >= size) {ttj -= size ;}
+                
+                ttk = i + tk ;
+                if (ttk < 0) {ttk += size ;}
+                else if (ttk >= size) {ttk -= size ;}
 
-            cost += fabs(ave[i][j][k] - in[tti][ttj][ttk]) ;
-            }
-         if (cost < min_cost)
-            {
-            mi = ti ;
-            mj = tj ;
-            mk = tk ;
-            min_cost = cost ;
+                cost += fabs(gl_ave[i][j][k] - in[tti][ttj][ttk]) ;
+                }
+             if (cost < min_cost)
+                {
+                mi = ti ;
+                mj = tj ;
+                mk = tk ;
+                min_cost = cost ;
+                }
             }
         }
 
@@ -563,19 +595,19 @@ void ave_min_recon( double ***in )
         if (ttk < 0) {ttk += size ;}
         else if (ttk >= size) {ttk -= size ;}
 
-        ave_min[i][j][k] += in[tti][ttj][ttk] ;
+        gl_ave[i][j][k] += in[tti][ttj][ttk] ;
 		}
-	++ave_min_iter ;
+	++gl_ave_count ;
 	}
 
-void replace_min_recon( double ***in )
+void add_running_ave( double ***in )
 	{
 	int i, j, k ;
 	
 	for (i = 0 ; i < size ; ++i)
 	for (j = 0 ; j < size ; ++j)
 	for (k = 0 ; k < size ; ++k)
-		min_state[i][j][k] = in[i][j][k] ;
+		running_ave[i][j][k] = in[i][j][k] ;
 	}
 
 
@@ -600,7 +632,7 @@ void print_mtf()
 	for (i = 0 ; i < size ; ++i)
 	for (j = 0 ; j < size ; ++j)
 	for (k = 0 ; k < size ; ++k)
-		fftw_array_r[(size * i + j) * size + k] = ave[i][j][k] / ave_iter ;
+		fftw_array_r[(size * i + j) * size + k] = gl_ave[i][j][k] / gl_ave_count ;
 			
 	fftw_execute( forward_plan ) ;
 	
@@ -636,7 +668,6 @@ double diff()
 	int i, j, k ;
 	double change, error = 0. ;
 	
-
     proj1(x, realp) ;
     
     double leash = 0.2;
