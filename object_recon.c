@@ -57,7 +57,8 @@ void free_mem() ;
 double diff() ;
 void randomize_state() ;
 void reset_support() ;
-void reset_average() ;
+void reset_t_ave() ;
+void reset_gl_ave() ;
 void shrink_support(double ***) ;
 void add_running_ave(double ***) ;
 void print_min_recon(int) ;
@@ -113,7 +114,10 @@ int main(int argc, char* argv[])
 			{
 			add_to_t_ave(fourierp) ;
         	if ((i % shrink_interval == 0) && (i > 2*shrinkwrap_start_ave)) 
+                {
             	shrink_support(t_ave) ;
+                reset_t_ave() ;
+                }
 			}
         fp = fopen("shrinkwrap.log", "a") ;
         fprintf(fp, "iter = %d    error = %f\n", i, error) ;
@@ -187,15 +191,25 @@ void reset_support()
 		dense_supp[supp[s][0]][supp[s][1]][supp[s][2]] = 1 ;
     }
 
-void reset_average()
+void reset_t_ave()
     {
     int i, j, k ;
 	for (i = 0 ; i < size ; ++i)
 	for (j = 0 ; j < size ; ++j)
 	for (k = 0 ; k < size ; ++k)
 		t_ave[i][j][k] = 0. ;
+    t_ave_count = 0. ;
     }
 
+void reset_gl_ave()
+    {
+    int i, j, k ;
+	for (i = 0 ; i < size ; ++i)
+	for (j = 0 ; j < size ; ++j)
+	for (k = 0 ; k < size ; ++k)
+		gl_ave[i][j][k] = 0. ;
+    gl_ave_count = 0. ;
+    }
 
 void print_recon()
 	{
