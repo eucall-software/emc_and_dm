@@ -451,9 +451,9 @@ void ave_recon( double ***in )
     for (tk = -1*shift ; tk <= shift ; ++ tk)
         {
         cost = 0. ;
-        for (i = 0 ; i < size ; ++i)
-        for (j = 0 ; j < size ; ++j)
-        for (k = 0 ; k < size ; ++k)
+        for (i = 0 ; i < len_supp ; ++i)
+        for (j = 0 ; j < len_supp ; ++j)
+        for (k = 0 ; k < len_supp ; ++k)
             {
             tti = i + ti ;
             if (tti < 0) {tti += size ;}
@@ -518,9 +518,9 @@ void ave_min_recon( double ***in )
     for (tk = -1*shift ; tk <= shift ; ++ tk)
         {
         cost = 0. ;
-        for (i = 0 ; i < size ; ++i)
-        for (j = 0 ; j < size ; ++j)
-        for (k = 0 ; k < size ; ++k)
+        for (i = 0 ; i < len_supp ; ++i)
+        for (j = 0 ; j < len_supp ; ++j)
+        for (k = 0 ; k < len_supp ; ++k)
             {
             tti = i + ti ;
             if (tti < 0) {tti += size ;}
