@@ -76,7 +76,7 @@ void proj2( double***, double*** ) ;
 
 int main(int argc, char* argv[])
 	{
-	int shrinkwrap_iter, shrinkwrap_start_ave, num_trials, iter, start_ave, i, t;
+	int shrinkwrap_iter, shrinkwrap_start_ave, shrink_cycles = 10, num_trials, iter, start_ave, i, t, c ;
 	double error, min_error, diff_t_ave_cutoff ;
 	FILE *fp ;
 
@@ -109,9 +109,9 @@ int main(int argc, char* argv[])
     reset_support() ;
     reset_t_ave() ;
     // Let the transient features decay away before finding support
-    for (i = 1 ; i <= TRANSIENTS ; ++i)
-        error = diff(); 
-    
+    //for (i = 1 ; i <= TRANSIENTS ; ++i)
+    //    error = diff(); 
+   /* 
     t = 0 ;
     leash = 0.1;
     do  {
@@ -120,7 +120,7 @@ int main(int argc, char* argv[])
             error = diff() ;
             diff_t_ave = add_to_t_ave(fourierp) ;
             ++ i ;
-            printf("iter = %d    error = %lf\n", i, diff_t_ave) ;
+            //printf("iter = %d    error = %lf\n", i, diff_t_ave) ;
             //} while ((diff_t_ave > D_AVE)&&(i < MAX_SUPP_REFINE) || (i < TRANSIENTS) ); 
             } while (i < MAX_SUPP_REFINE) ;
         ++ t ;
@@ -131,38 +131,44 @@ int main(int argc, char* argv[])
         reset_t_ave() ;
         //} while (fabs((double) diff_support)/curr_num_supp > D_SUPP ) ;
         } while(t < MAX_SUPP_REFINE_CYCLES) ;
-
+	*/
     // Reconstructions begin here
     leash = 0.2;
-    for (t = 1 ; t <= num_trials ; ++t)
-        {
-        printf("Starting phasing trial %d\n", t) ;
-        char obj_buffer [100] ;
-        sprintf(obj_buffer, "object%03d.log", t) ;
-        fp = fopen(obj_buffer, "w") ;
-        fprintf(fp, "size = %d    len_supp = %d    num_supp = %d\n\n", size, len_supp, num_supp) ;
-        fclose(fp) ;
-	    min_error = 1.E20 ;
-        randomize_state() ;
-        reset_t_ave() ;
-        for (i = 1 ; i <= iter ; ++i)
-            {
-            error = diff() ;
-            
-            if ((i > start_ave) && (error < min_error))
-                {
-                min_error = error ;
-                replace_min_state(fourierp) ; 
-                }
-            fp = fopen(obj_buffer, "a") ;
-            fprintf(fp, "iter = %d    error = %f\n", i, error) ;
-            fclose(fp) ;
-            }
-        add_to_gl_ave(min_state) ;
-        print_min_recon(t) ; 	
-        }
-    print_recon() ;
-    print_mtf() ;
+	for (c = 1 ; c <= shrink_cycles ; ++c)
+		{
+		reset_gl_ave() ;
+		for (t = 1 ; t <= num_trials ; ++t)
+			{
+			printf("Starting phasing trial %d\n", t) ;
+			char obj_buffer [100] ;
+			sprintf(obj_buffer, "object%03d.log", t) ;
+			fp = fopen(obj_buffer, "w") ;
+			fprintf(fp, "size = %d    len_supp = %d    num_supp = %d\n\n", size, len_supp, num_supp) ;
+			fclose(fp) ;
+			min_error = 1.E20 ;
+			randomize_state() ;
+			reset_t_ave() ;
+			for (i = 1 ; i <= iter ; ++i)
+				{
+				error = diff() ;
+				
+				if ((i > start_ave) && (error < min_error))
+					{
+					min_error = error ;
+					replace_min_state(fourierp) ; 
+					}
+				fp = fopen(obj_buffer, "a") ;
+				fprintf(fp, "iter = %d    error = %f\n", i, error) ;
+				fclose(fp) ;
+				}
+			add_to_gl_ave(min_state) ;
+			print_min_recon(t) ; 	
+			}
+		print_recon() ;
+    	print_mtf() ;
+		shrink_support(gl_ave) ;
+		//Shrink support with min_
+		}
 	free_mem() ;
 	
 	return 0 ;
