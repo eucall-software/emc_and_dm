@@ -35,22 +35,30 @@ finish_object.dat, mtf.dat, object.log
 #include <assert.h>
 
 #define MTF 20
+#define TRANSIENTS 20
+#define D_SUPP 0.005
+#define MAX_SUPP_REFINE 200
+#define MAX_SUPP_REFINE_CYCLES 10
+#define D_AVE 0.0105
 
 int (*supp)[3] ;
 int ***dense_supp ;
 int *supp_flag ;
 int *ord, *beg, *end ;
-double *tempx, ***x, ***realp, ***r1, ***fourierp, ***mag, ***t_ave, ***gl_ave, ***running_ave ;
+double *tempx, ***x, ***realp, ***r1, ***fourierp, ***mag, ***t_ave, ***gl_ave, ***min_state ;
 double *fftw_array_r ;
 fftw_complex *fftw_array_c ;
 fftw_plan forward_plan, backward_plan ; 
 
 int size, qmax, len_supp, num_supp, shrink_interval ;
 double t_ave_count = 0., gl_ave_count = 0. ;
+double diff_t_ave ;
+double leash = 0. ;
+int curr_num_supp, diff_support ;
 
 void print_recon() ;
 void print_mtf() ;
-void add_to_t_ave( double*** ) ;
+double add_to_t_ave( double*** ) ;
 void add_to_gl_ave( double*** ) ;
 int setup() ;
 void free_mem() ;
@@ -59,8 +67,8 @@ void randomize_state() ;
 void reset_support() ;
 void reset_t_ave() ;
 void reset_gl_ave() ;
-void shrink_support(double ***) ;
-void add_running_ave(double ***) ;
+int shrink_support(double ***) ;
+void replace_min_state(double ***) ;
 void print_min_recon(int) ;
 void proj1( double***, double*** ) ;
 void proj2( double***, double*** ) ;
@@ -69,24 +77,19 @@ void proj2( double***, double*** ) ;
 int main(int argc, char* argv[])
 	{
 	int shrinkwrap_iter, shrinkwrap_start_ave, num_trials, iter, start_ave, i, t;
-	double error, min_error ;
+	double error, min_error, diff_t_ave_cutoff ;
 	FILE *fp ;
-	
-	if ( argc == 7 )
+
+    //TODO: Change input parameters
+	if ( argc == 4 )
 		{
-        shrinkwrap_iter 	= atoi(argv[1]) ;
-        shrinkwrap_start_ave= atoi(argv[2]) ;
-        shrink_interval 	= atoi(argv[3]) ;
-        num_trials      	= atoi(argv[4]) ;
-		iter            	= atoi(argv[5]) ;
-		start_ave       	= atoi(argv[6]) ;
+        num_trials      	= atoi(argv[1]) ;
+		iter            	= atoi(argv[2]) ;
+		start_ave       	= atoi(argv[3]) ;
 		}
 	else
 		{
-		printf("expected six arguments:\n" 
-        "\tshrinkwrap_iterations\n"
-        "\tshrinkwrap_start_ave\n"
-        "\tshrinkwrap_intervals\n"
+		printf("expected three arguments:\n" 
         "\tnum_trials\n"
         "\tnum_iter\n"
         "\tstart_ave\n") ;
@@ -98,44 +101,50 @@ int main(int argc, char* argv[])
 	
 	fp = fopen("shrinkwrap.log", "w") ;
 	fprintf(fp, "size = %d    len_supp = %d    num_supp = %d\n\n", size, len_supp, num_supp) ;
+    fprintf(fp, "\nStarting support shrink-wrap cycle.\n") ;
 	fclose(fp) ;
 
-    //This is the shrink-wrap cycle.
+    //This is the shrink-wrap portion of the algorithm.
     randomize_state() ;
     reset_support() ;
-    fp = fopen("shrinkwrap.log", "a") ;
-    fprintf(fp, "\nStarting support shrink-wrap cycle.\n") ;
-    fclose(fp) ;
-	t_ave_count = 0. ;
-    for (i = 1 ; i <= shrinkwrap_iter ; ++i)
-        {
-        error = diff() ;
-		if (i > shrinkwrap_start_ave)
-			{
-			add_to_t_ave(fourierp) ;
-        	if ((i % shrink_interval == 0) && (i > 2*shrinkwrap_start_ave)) 
-                {
-            	shrink_support(t_ave) ;
-                reset_t_ave() ;
-                }
-			}
+    reset_t_ave() ;
+    // Let the transient features decay away before finding support
+    for (i = 1 ; i <= TRANSIENTS ; ++i)
+        error = diff(); 
+    
+    t = 0 ;
+    leash = 0.1;
+    do  {
+        i = 0 ;
+        do  {
+            error = diff() ;
+            diff_t_ave = add_to_t_ave(fourierp) ;
+            ++ i ;
+            printf("iter = %d    error = %lf\n", i, diff_t_ave) ;
+            //} while ((diff_t_ave > D_AVE)&&(i < MAX_SUPP_REFINE) || (i < TRANSIENTS) ); 
+            } while (i < MAX_SUPP_REFINE) ;
+        ++ t ;
         fp = fopen("shrinkwrap.log", "a") ;
-        fprintf(fp, "iter = %d    error = %f\n", i, error) ;
+        fprintf(fp, "cycle = %d      iter = %d    error = %f\n", t, i, diff_t_ave) ;
         fclose(fp) ;
-        }
+        diff_support = shrink_support(t_ave) ;
+        reset_t_ave() ;
+        //} while (fabs((double) diff_support)/curr_num_supp > D_SUPP ) ;
+        } while(t < MAX_SUPP_REFINE_CYCLES) ;
 
-    //This is the averaging cycle
+    // Reconstructions begin here
+    leash = 0.2;
     for (t = 1 ; t <= num_trials ; ++t)
         {
+        printf("Starting phasing trial %d\n", t) ;
         char obj_buffer [100] ;
         sprintf(obj_buffer, "object%03d.log", t) ;
         fp = fopen(obj_buffer, "w") ;
         fprintf(fp, "size = %d    len_supp = %d    num_supp = %d\n\n", size, len_supp, num_supp) ;
         fclose(fp) ;
-	    min_error = 100. ;
+	    min_error = 1.E20 ;
         randomize_state() ;
-        fp = fopen(obj_buffer, "a") ;
-        fprintf(fp, "\nStarting trial %02d.\n", t) ;
+        reset_t_ave() ;
         for (i = 1 ; i <= iter ; ++i)
             {
             error = diff() ;
@@ -143,12 +152,13 @@ int main(int argc, char* argv[])
             if ((i > start_ave) && (error < min_error))
                 {
                 min_error = error ;
-                add_running_ave(fourierp) ; 
+                replace_min_state(fourierp) ; 
                 }
+            fp = fopen(obj_buffer, "a") ;
             fprintf(fp, "iter = %d    error = %f\n", i, error) ;
+            fclose(fp) ;
             }
-        fclose(fp) ;
-        add_to_gl_ave(running_ave) ;
+        add_to_gl_ave(min_state) ;
         print_min_recon(t) ; 	
         }
     print_recon() ;
@@ -157,7 +167,6 @@ int main(int argc, char* argv[])
 	
 	return 0 ;
 	}
-	
 
 void randomize_state()
     {
@@ -242,7 +251,7 @@ void print_min_recon(int num)
 	for (j = 0 ; j < len_supp ; ++j)
 		{
 		for (k = 0 ; k < len_supp ; ++k)
-			fprintf(fp, "%f ", running_ave[i][j][k]) ;
+			fprintf(fp, "%f ", min_state[i][j][k]) ;
 			
 		fprintf(fp, "\n") ;
 		}
@@ -266,6 +275,7 @@ int setup()
 	fscanf(fp, "%d %d", &qmax, &num_supp) ;
 	size = 2 * qmax + 1 ;
 
+    curr_num_supp = num_supp ;
 	supp = malloc(num_supp * sizeof(*supp)) ;
     supp_flag = malloc(num_supp * sizeof(*supp_flag)) ;	
 	len_supp = 0 ;
@@ -279,6 +289,7 @@ int setup()
             if (supp[s][i] > len_supp)
                 len_supp = supp[s][i] ;
             }
+
         }
 	++len_supp ;
 
@@ -319,7 +330,7 @@ int setup()
 	fourierp = malloc(size * sizeof(double**)) ;
 	t_ave = malloc(size * sizeof(double**)) ;
 	gl_ave = malloc(size * sizeof(double**)) ;
-    running_ave = malloc(size * sizeof(double **)) ;
+    min_state = malloc(size * sizeof(double **)) ;
 
 	for (i = 0 ; i < size ; ++i)
 		{
@@ -330,7 +341,7 @@ int setup()
 		fourierp[i] = malloc(size * sizeof(double*)) ;
 		t_ave[i] = malloc(size * sizeof(double*)) ;
 		gl_ave[i] = malloc(size * sizeof(double*)) ;
-		running_ave[i] = malloc(size * sizeof(double*)) ;
+		min_state[i] = malloc(size * sizeof(double*)) ;
 		
 		for (j = 0 ; j < size ; ++j)
 			{
@@ -341,7 +352,7 @@ int setup()
 			fourierp[i][j] = malloc(size * sizeof(double)) ;
 			t_ave[i][j] = malloc(size * sizeof(double)) ;
 			gl_ave[i][j] = malloc(size * sizeof(double)) ;
-			running_ave[i][j] = malloc(size * sizeof(double)) ;
+			min_state[i][j] = malloc(size * sizeof(double)) ;
 			}
 		}
 		
@@ -412,7 +423,6 @@ int setup()
 	return 1 ;
 	}
 		
-	
 void free_mem()
 	{
 	int i, j ;
@@ -436,7 +446,7 @@ void free_mem()
 		{
 		for (j = 0 ; j < size ; ++j)
 			{
-            free(running_ave[i][j]) ;
+            free(min_state[i][j]) ;
 			free(mag[i][j]) ;
 			free(x[i][j]) ;
 			free(realp[i][j]) ;
@@ -445,7 +455,7 @@ void free_mem()
 			free(t_ave[i][j]) ;
 			free(gl_ave[i][j]) ;
 			}
-        free(running_ave[i]) ;			
+        free(min_state[i]) ;			
 		free(mag[i]) ;
 		free(x[i]) ;
 		free(realp[i]) ;
@@ -455,7 +465,7 @@ void free_mem()
 		free(gl_ave[i]) ;
 		}
 	
-    free(running_ave) ;
+    free(min_state) ;
 	free(mag) ;
 	free(x) ;
 	free(realp) ;
@@ -471,8 +481,7 @@ void free_mem()
 	fftw_destroy_plan(backward_plan) ;
 	}
 	
-	
-void add_to_t_ave( double ***in )
+double add_to_t_ave( double ***in )
 	{
 	//We assume that the support is non-centrosymmetric, 
     //so we only have to check for translated reconstructions 
@@ -481,7 +490,8 @@ void add_to_t_ave( double ***in )
     int mi, mj, mk ;
     int shift = 1 ;
     double cost, min_cost ;
-   
+    double diff_c, diff_ave = 0. ; 
+
     //Scan for the translated "in"-reconstruction that is most similar
     //to running average
     mi = mj = mk = 0 ;
@@ -537,8 +547,12 @@ void add_to_t_ave( double ***in )
         else if (ttk >= size) {ttk -= size ;}
 
         t_ave[i][j][k] += in[tti][ttj][ttk] ;
+        diff_c = (t_ave_count > 0.) ? fabs(in[tti][ttj][ttk] - t_ave[i][j][k]/t_ave_count) : fabs(in[tti][ttj][ttk]);
+        diff_ave += diff_c*diff_c ;
 		}
 	++t_ave_count ;
+    diff_ave = sqrt(diff_ave/ ((double) len_supp*len_supp*len_supp)) ;
+    return diff_ave ;
 	}
 	
 void add_to_gl_ave( double ***in )
@@ -548,7 +562,7 @@ void add_to_gl_ave( double ***in )
     //but not inverted ones.
     int i, j, k, ti, tj, tk, tti, ttj, ttk ;
     int mi, mj, mk ;
-    int shift = 1 ;
+    int shift = 0 ;
     double cost, min_cost ;
    
     //Scan for the translated "in"-reconstruction that is most similar
@@ -557,7 +571,6 @@ void add_to_gl_ave( double ***in )
     mi = mj = mk = 0 ;
     if (gl_ave_count > 0.)
         {
-        printf("Trying the translations...\n") ;
         for (ti = -1*shift ; ti <= shift ; ++ ti)
         for (tj = -1*shift ; tj <= shift ; ++ tj)
         for (tk = -1*shift ; tk <= shift ; ++ tk)
@@ -567,6 +580,9 @@ void add_to_gl_ave( double ***in )
             for (j = 0 ; j < len_supp ; ++j)
             for (k = 0 ; k < len_supp ; ++k)
                 {
+                if (dense_supp[i][j][k] == 0) 
+                    continue ;
+
                 tti = i + ti ;
                 if (tti < 0) {tti += size ;}
                 else if (tti >= size) {tti -= size ;}
@@ -614,16 +630,15 @@ void add_to_gl_ave( double ***in )
 	++gl_ave_count ;
 	}
 
-void add_running_ave( double ***in )
+void replace_min_state( double ***in )
 	{
 	int i, j, k ;
 	
 	for (i = 0 ; i < size ; ++i)
 	for (j = 0 ; j < size ; ++j)
 	for (k = 0 ; k < size ; ++k)
-		running_ave[i][j][k] = in[i][j][k] ;
+		min_state[i][j][k] = in[i][j][k] ;
 	}
-
 
 void print_mtf()
 	{
@@ -676,18 +691,16 @@ void print_mtf()
 	fclose(fp) ;
 	}
 	
-	
 double diff()
 	{
 	int i, j, k ;
 	double change, error = 0. ;
-	
+
     proj1(x, realp) ;
-    
-    double leash = 0.2;
-	for (i = 0 ; i < size ; ++i)
-	for (j = 0 ; j < size ; ++j)
-	for (k = 0 ; k < size ; ++k)
+
+    for (i = 0 ; i < size ; ++i)
+    for (j = 0 ; j < size ; ++j)
+    for (k = 0 ; k < size ; ++k)
         {
         x[i][j][k] = (1.0-leash)*x[i][j][k] + leash*realp[i][j][k] ;
         }
@@ -713,7 +726,6 @@ double diff()
 	return sqrt( error / (size * size * size) ) ;
 	}
 	
-
 void proj1( double ***in, double ***out )
 	{
 	int i, j, k, qmax1 ;
@@ -747,7 +759,6 @@ void proj1( double ***in, double ***out )
 		out[i][j][k] = fftw_array_r[(size * i + j) * size + k] / sqrt(vol) ;
 	}
 	
-	
 void proj2( double ***in, double ***out )
 	{
 	int i, j, k, is, js, ks, s, pivPos, L, R ;
@@ -769,21 +780,26 @@ void proj2( double ***in, double ***out )
 		}
 	}
 
-void shrink_support(double ***in)
+int shrink_support(double ***in)
 	{
-	int i, j, k, is, js, ks, kerl=1 ;
+	int i, j, k, is, js, ks, kerl=2 ;
 	double val, avg, avg_c, max_v, min_v, cutoff ;
-	double dyn_rng = 0.01 ;
+	double dyn_rng = D_AVE ;
+    int diff_num_supp, new_num_supp = 0 ;
 
 	avg 	= 0. ;
 	avg_c 	= 0. ;
 	max_v 	= 0. ;
 	min_v 	= 1.E20 ;
-
+    
+    curr_num_supp = 0 ;
 	for (i = 0 ; i < len_supp ; ++i)
 	for (j = 0 ; j < len_supp ; ++j)
 	for (k = 0 ; k < len_supp ; ++k)
 		{
+        if (dense_supp[i][j][k] == 1)
+            curr_num_supp += 1 ;
+
 		val = in[i][j][k] ;
 		if (val < 0. || dense_supp[i][j][k] == 0)
 			continue ;
@@ -812,13 +828,15 @@ void shrink_support(double ***in)
 			}
 		}
 	
-	avg_c = 0. ;
 	for (i = 0 ; i < len_supp ; ++i)
 	for (j = 0 ; j < len_supp ; ++j)
 	for (k = 0 ; k < len_supp ; ++k)
-		avg_c += dense_supp[i][j][k] ;
+		new_num_supp += dense_supp[i][j][k] ;
 
-	printf("Number of support voxels: %d\n", (int) avg_c) ;
+    diff_num_supp = new_num_supp - curr_num_supp ;
+    curr_num_supp = new_num_supp ;
+	printf("Number and change in number of support voxels: %d\t%d\n", curr_num_supp, diff_num_supp) ;
+    return diff_num_supp ;
 	}
 
 /*
