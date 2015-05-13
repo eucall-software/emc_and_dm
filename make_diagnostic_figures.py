@@ -104,6 +104,7 @@ if __name__ == "__main__":
     parser.add_option("-f", "--file_name", dest="tmp_fn", default="orient.h5", help="name of temporary file from EMC recon")
     (op, args) = parser.parse_args()
 
+    #TODO: Keep functions that compare multiple reconstructions. Eg. merging.
     # Scan directories for reconstructions that were done.
     # Reference directory is the zeroth (or first) one.
     dirs        = glob.glob("20*/")

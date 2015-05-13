@@ -6,6 +6,11 @@ from optparse import OptionParser
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 import matplotlib.ticker as Tick
+from supp_py_modules import viewRecon as VR
+from supp_py_modules import read_results as read
+import matplotlib as M
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from mpl_toolkits.mplot3d import Axes3D
 
 ###############################################################
 # Argument parser for important input
@@ -36,6 +41,10 @@ parser.add_option("-m", "--maxIterations", action="store", type="int", dest="max
 
 parser.add_option("-e", "--minError", action="store", type="float", dest="minError", help="minimum error for terminating iterative intensity reconstructions", metavar="", default=4.E-8)
 
+parser.add_option("-p", action="store_true", dest="plot", default=True)
+
+parser.add_option("-d", action="store_true", dest="detailed", default=False)
+
 ct = time.localtime()
 currTimeStamp = "%04d_%02d_%02d_%02d_%02d_%02d"%(ct.tm_year, ct.tm_mon, ct.tm_mday, ct.tm_hour, ct.tm_min, ct.tm_sec)
 parser.add_option("-t", "--timeStamp", action="store", type="string", dest="timeStamp", help="time stamp to use for output", metavar="", default=currTimeStamp)
@@ -61,6 +70,86 @@ def create_directory(dir_name, log_file=runLogFile, err_msg=""):
         print_to_log("Creating " + dir_name, log_file=log_file)
         os.makedirs(dir_name)
 
+def load_reference_intensites(ref_file):
+    fp      = h5py.File(ref_file, 'r')
+    t_intens = (fp["data/data"].value()).astype("float")
+    fp.close()
+    intens_len = len(t_intens)
+    qmax    = intens_len/2
+    (q_low, q_high) = (15, int(0.9*qmax))
+    qRange1 = N.arange(-q_high, q_high + 1)
+    qRange2 = N.arange(-qmax, qmax + 1)
+    qPos0   = N.array([[i,j,0] for i in qRange1 for j in qRange1 if N.sqrt(i*i+j*j) > q_low]).astype("float")
+    qPos1   = N.array([[i,0,j] for i in qRange1 for j in qRange1 if N.sqrt(i*i+j*j) > q_low]).astype("float")
+    qPos2   = N.array([[0,i,j] for i in qRange1 for j in qRange1 if N.sqrt(i*i+j*j) > q_low]).astype("float")
+    qPos    = N.concatenate((qPos0, qPos1, qPos2))
+    qPos_full = N.array([[i,j,k] for i in qRange2 for j in qRange2 for k in qRange2]).astype("float")
+    return (qmax, t_intens, intens_len, qPos, qPos_full)
+
+def zero_neg(x):
+    return 0. if x<=0. else x
+v_zero_neg  = N.vectorize(zero_neg)
+
+def find_two_means(vals, v0, v1):
+    v0_t    = 0.
+    v0_t_n  = 0.
+    v1_t    = 0.
+    v1_t_n  = 0.
+    for vv in vals:
+        if (N.abs(vv-v0) > abs(vv-v1)):
+            v1_t    += vv
+            v1_t_n  += 1.
+        else:
+            v0_t    += vv
+            v0_t_n  += 1.
+    return (v0_t/v0_t_n, v1_t/v1_t_n)
+
+def cluster_two_means(vals):
+    (v0,v1)     = (0.,0.1)
+    (v00, v11)  = find_two_means(vals, v0, v1)
+    err = 0.5*(N.abs(v00-v0)+N.abs(v11-v1))
+    while(err > 1.E-5):
+        (v00, v11)  = find_two_means(vals, v0, v1)
+        err         = 0.5*(N.abs(v00-v0)+N.abs(v11-v1))
+        (v0, v1)    = (v00, v11)
+    return (v0, v1)
+
+def support_from_autocorr(auto, qmax, thr_0, thr_1, kl=1, write=True):
+    pos     = N.argwhere(N.abs(auto-thr_0) > N.abs(auto-thr_1))
+    pos_set = set()
+    pos_list= []
+    kerl    = range(-kl,kl+1)
+    ker     = [[i,j,k] for i in kerl for j in kerl for k in kerl]
+
+    def trun(v):
+        return int(N.ceil(0.5*v))
+    v_trun = N.vectorize(trun)
+
+    for (pi, pj, pk) in pos:
+        for (ci, cj, ck) in ker:
+            pos_set.add((pi+ci, pj+cj, pk+ck))
+    for s in pos_set:
+        pos_list.append([s[0], s[1], s[2]])
+
+    pos_array = N.array(pos_list)
+    pos_array -= [a.min() for a in pos_array.transpose()]
+    pos_array = N.array([v_trun(a) for a in pos_array])
+
+    if write:
+        fp  = open("support.dat", "w")
+        fp.write("%d %d\n"%(qmax, len(pos_array)))
+        for p in pos_array:
+            fp.write("%d %d %d\n" % (p[0], p[1], p[2]))
+        fp.close()
+
+    return pos_array
+
+def show_support(support):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    (x,y,z) = support.transpose()
+    ax.scatter(x, y, z, c='r', marker='s')
+    plt.show()
 ###############################################################
 # Convert photons into sparse format, split into multiple files
 # Create detector.dat, creation of beamstop
@@ -470,7 +559,7 @@ gen = EMCCaseGenerator()
 ###############################################################
 create_directory(op.tmpOutDir)
 create_directory(op.outDir)
-runInstanceDir = os.path.join(op.tmpOutDir, op.timeStamp + "/")
+runInstanceDir = os.path.join(op.tmpOutDir, "orient_" + op.timeStamp + "/")
 create_directory(runInstanceDir, err_msg=" Assuming that you are continuing a previous reconstruction.")
 
 outputLog           = os.path.join(runInstanceDir, "EMC_extended.log")
@@ -547,6 +636,11 @@ if not (os.path.isfile(outFile)):
     gg.create_group("mutual_info")
     gg.create_group("quaternion")
     gg.create_group("time")
+    c = N.array([gen.qmax, gen.qmax, gen.qmax])
+    f.create_dataset("data/center", data=c)
+    f.create_dataset("misc/qmax", data=gen.qmax)
+    f.create_dataset("misc/detector", data=gen.detector)
+    f.create_dataset("misc/beamstop", data=gen.beamstop)
 
     f.create_dataset("version", data=h5py.version.hdf5_version)
     f.close()
@@ -597,13 +691,25 @@ while(currQuat <= op.maxQuat):
 
         f = h5py.File(outFile, "a")
         gg = f["history/intensities"]
-        gg.create_dataset("%04d"%(iter_num + offset_iter), data=gen.intensities)
+        if op.detailed:
+            gg.create_dataset("%04d"%(iter_num + offset_iter), data=gen.intensities, compression="gzip", compression_opts=9)
+        try:
+            f.create_dataset("data/data", data=gen.intensities, compression="gzip", compression_opts=9)
+        except:
+            temp = f["data/data"]
+            temp[...] = gen.intensities
 
         gg = f["history/error"]
         gg.create_dataset("%04d"%(iter_num + offset_iter), data=diff)
 
         gg = f["history/angle"]
-        gg.create_dataset("%04d"%(iter_num + offset_iter), data=most_likely_orientations)
+        gg.create_dataset("%04d"%(iter_num + offset_iter), data=most_likely_orientations, compression="gzip", compression_opts=9)
+
+        try:
+            f.create_dataset("data/angle", data=most_likely_orientations, compression="gzip", compression_opts=9)
+        except:
+            temp = f["data/angle"]
+            temp[...] = most_likely_orientations
 
         gg = f["history/mutual_info"]
         gg.create_dataset("%04d"%(iter_num + offset_iter), data=data_info)
@@ -626,23 +732,29 @@ while(currQuat <= op.maxQuat):
     currQuat += 1
 
 ###############################################################
-# Save final EMC_output to S2E-h5 format
-#   using soft-links to old versions if necessary
+# Plot the diagnostics of this run
 ###############################################################
+if op.plot:
+    print "="*80
+    print "Making error plot"
+    VR.make_error_time_plot(outFile)
+    if op.detailed:
+        print "="*80
+        print "Plotting and saving intensity sections to disk"
+        VR.make_panel_of_intensity_slices(outFile, c_n=16)
 
-c = N.array([gen.qmax, gen.qmax, gen.qmax])
-f = h5py.File(outFile, "a")
-d = f["data"]
-maxIntensKey = str(max([int(xx) for xx in f["history/intensities"].keys()]))
-d["data"] = h5py.SoftLink("history/intensities/"+("%04d"%maxIntensKey))
-#f.create_dataset("data/angle", data=??)
-f.create_dataset("data/center", data=c)
+        print "="*80
+        print "Plotting mutual information and orientations to disk"
+        VR.make_mutual_info_plot(outFile)
 
-#errList = [f["history/error/%04d"%xx].value for xx in range(1,iter_num)]
-#f.create_dataset("history/error/errList", data=N.array(errList))
-#f.create_dataset("params/info", data="None")
-#f.create_dataset("info/", data=??)
-f.create_dataset("misc/qmax", data=gen.qmax)
-f.create_dataset("misc/detector", data=gen.detector)
-f.create_dataset("misc/beamstop", data=gen.beamstop)
-f.close()
+    (qmax, t_intens, intens_len, qPos, qPos_full) = load_reference_intensites(curr_file)
+    avg_intens = t_intens
+    avg_intens.tofile("object_intensity.dat", sep=" ")
+
+    print "Computing autocorrelation..."
+    avg_intens  = v_zero_neg(avg_intens.ravel()).reshape(avg_intens.shape)
+    auto        = N.fft.fftshift(N.abs(N.fft.fftn(N.fft.ifftshift(avg_intens))))
+    print "Using 2-means clustering to determine significant voxels in autocorrelation..."
+    (a_0, a_1)  = cluster_two_means(auto.ravel())
+    print "Determining support from autocorrelation (will write to support.dat by default)..."
+    support     = support_from_autocorr(auto, qmax, a_0, a_1)
