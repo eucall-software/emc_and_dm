@@ -31,8 +31,7 @@ parser.add_option("-s", "--srcDir", action="store", type="string", dest="srcDir"
 
 parser.add_option("-T", "--tmpOutDir", action="store", type="string", dest="tmpOutDir", help="temporary directory to store intermediate states of calculation", metavar="", default=cwd)
 
-#TODO: outDir doesn't seem to be used.
-#parser.add_option("-o", "--outDir", action="store", type="string", dest="outDir", help="absolute path to output", metavar="", default=cwd)
+parser.add_option("-o", "--outDir", action="store", type="string", dest="outDir", help="absolute path to output", metavar="", default=cwd)
 
 parser.add_option("-q", "--initialQuaternion", action="store", type="int", dest="initialQuat", help="", metavar="", default=5)
 
@@ -559,7 +558,7 @@ gen = EMCCaseGenerator()
 # Check that subdirectories for intermediate output exist
 ###############################################################
 create_directory(op.tmpOutDir)
-#create_directory(op.outDir)
+create_directory(op.outDir)
 runInstanceDir = os.path.join(op.tmpOutDir, "orient_" + op.timeStamp + "/")
 create_directory(runInstanceDir, err_msg=" Assuming that you are continuing a previous reconstruction.")
 
@@ -620,7 +619,10 @@ if not (os.path.isfile(os.path.join(op.tmpOutDir, "make_diagnostic_figures.py"))
 # Create dummy destination h5 for intermediate output from EMC
 ###############################################################
 os.chdir(runInstanceDir)
-outFile = "orient.h5"
+#Output file is kept in tmpOutDir,
+#a hard-linked version of this is kept in outDir
+outFile = os.path.join(op.tmpOutDir, "orient.h5")
+outFileHardLink = os.path.join(op.outDir, "orient.h5")
 offset_iter = 0
 if not (os.path.isfile(outFile)):
     f = h5py.File(outFile, "w")
@@ -650,6 +652,12 @@ else:
     offset_iter = len(f["/history/intensities"].keys())
     f.close()
     msg = "Output will be appended to the results of %d iterations before this."%offset_iter
+    print_to_log(msg)
+
+if not (os.path.isfile(outFileHardLink)):
+    os.link(outFile, outFileHardLink)
+else:
+    msg = "Hard link to %s already exists and will not be re-created.."%(outFileHardLink)
     print_to_log(msg)
 
 ###############################################################
