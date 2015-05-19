@@ -6,6 +6,6 @@ INPUT=/mnt/cbis/images/duaneloh/S2E/sim_5kev_30fs_35_2NIP_EMC_noCompton/diffr/
 SLEEPDUR=60
 for i in `seq 1 5`;
 do
-	nohup python runEMC.py -s $SRC -T $TMP -i $INPUT &
+	nohup python runDM.py -s $SRC -T $TMP -i $INPUT &
 	sleep $SLEEPDUR 
 done

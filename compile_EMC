@@ -1,0 +1,5 @@
+#!/bin/bash
+gcc -O3 EMC.c -lm -Wno-unused-result -o EMC -fopenmp
+cd supp_py_modules
+python setup.py build_ext --inplace
+cd ..
