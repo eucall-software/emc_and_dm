@@ -1,6 +1,8 @@
 import numpy as N
 import h5py
-import os, time, sys
+import os
+import time
+import sys
 import glob
 from optparse import OptionParser
 from mpl_toolkits.mplot3d import Axes3D
@@ -10,7 +12,6 @@ from supp_py_modules import viewRecon as VR
 from supp_py_modules import read_results as read
 import matplotlib as M
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from mpl_toolkits.mplot3d import Axes3D
 
 ###############################################################
 # Argument parser for important input
@@ -31,7 +32,7 @@ parser.add_option("-s", "--srcDir", action="store", type="string", dest="srcDir"
 parser.add_option("-T", "--tmpOutDir", action="store", type="string", dest="tmpOutDir", help="temporary directory to store intermediate states of calculation", metavar="", default=cwd)
 
 #TODO: outDir doesn't seem to be used.
-parser.add_option("-o", "--outDir", action="store", type="string", dest="outDir", help="absolute path to output", metavar="", default=cwd)
+#parser.add_option("-o", "--outDir", action="store", type="string", dest="outDir", help="absolute path to output", metavar="", default=cwd)
 
 parser.add_option("-q", "--initialQuaternion", action="store", type="int", dest="initialQuat", help="", metavar="", default=5)
 
@@ -558,7 +559,7 @@ gen = EMCCaseGenerator()
 # Check that subdirectories for intermediate output exist
 ###############################################################
 create_directory(op.tmpOutDir)
-create_directory(op.outDir)
+#create_directory(op.outDir)
 runInstanceDir = os.path.join(op.tmpOutDir, "orient_" + op.timeStamp + "/")
 create_directory(runInstanceDir, err_msg=" Assuming that you are continuing a previous reconstruction.")
 
@@ -747,7 +748,7 @@ if op.plot:
         print "Plotting mutual information and orientations to disk"
         VR.make_mutual_info_plot(outFile)
 
-    (qmax, t_intens, intens_len, qPos, qPos_full) = load_reference_intensites(curr_file)
+    (qmax, t_intens, intens_len, qPos, qPos_full) = load_reference_intensites(outFile)
     avg_intens = t_intens
     avg_intens.tofile("object_intensity.dat", sep=" ")
 
