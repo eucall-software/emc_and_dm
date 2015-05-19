@@ -19,6 +19,6 @@ do
     echo "Starting reconstruction ${i}."
     echo "Temporary output stored in ${TMP}."
     echo "Output stored in ${OUTPUT}."
-	nohup python runEMC.py -s $SRC -T $TMP -i $INPUT -o $OUTPUT &
-	sleep $SLEEPDUR 
+	nohup python runEMC.py -s ${SRC} -T ${TMP} -i ${INPUT} -o ${OUTPUT} &
+	sleep ${SLEEPDUR}
 done

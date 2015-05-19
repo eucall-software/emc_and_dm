@@ -70,7 +70,7 @@ def create_directory(dir_name, log_file=runLogFile, err_msg=""):
         print_to_log("Creating " + dir_name, log_file=log_file)
         os.makedirs(dir_name)
 
-def load_reference_intensites(ref_file):
+def load_intensities(ref_file):
     fp      = h5py.File(ref_file, 'r')
     t_intens = (fp["data/data"].value()).astype("float")
     fp.close()
@@ -756,9 +756,9 @@ if op.plot:
         print "Plotting mutual information and orientations to disk"
         VR.make_mutual_info_plot(outFile)
 
-    (qmax, t_intens, intens_len, qPos, qPos_full) = load_reference_intensites(outFile)
+    (qmax, t_intens, intens_len, qPos, qPos_full) = load_intensities(outFile)
     avg_intens = t_intens
-    avg_intens.tofile("object_intensity.dat", sep=" ")
+    #avg_intens.tofile("object_intensity.dat", sep=" ")
 
     print "Computing autocorrelation..."
     avg_intens  = v_zero_neg(avg_intens.ravel()).reshape(avg_intens.shape)

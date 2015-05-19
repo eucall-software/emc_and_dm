@@ -2,10 +2,6 @@
 SRC=/mnt/cbis/images/duaneloh/S2E/Src_kane/
 TMP=/mnt/cbis/images/duaneloh/S2E/tmp/kane_30fs_noCompton/
 INPUT=/mnt/cbis/images/duaneloh/S2E/sim_5kev_30fs_35_2NIP_EMC_noCompton/diffr/ 
+OUTPUT=/mnt/cbis/images/duaneloh/S2E/tmp/kane_30fs_noCompton/
 
-SLEEPDUR=60
-for i in `seq 1 5`;
-do
-	nohup python runDM.py -s $SRC -T $TMP -i $INPUT &
-	sleep $SLEEPDUR 
-done
+nohup python runDM.py -s ${SRC} -T ${TMP} -i ${INPUT} -o ${OUTPUT}&

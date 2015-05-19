@@ -80,7 +80,6 @@ int main(int argc, char* argv[])
 	double error, min_error, diff_t_ave_cutoff ;
 	FILE *fp ;
 
-    //TODO: Change input parameters
 	if ( argc == 4 )
 		{
         num_trials      	= atoi(argv[1]) ;
@@ -167,7 +166,6 @@ int main(int argc, char* argv[])
 		print_recon() ;
     	print_mtf() ;
 		shrink_support(gl_ave) ;
-		//Shrink support with min_
 		}
 	free_mem() ;
 	
@@ -844,131 +842,3 @@ int shrink_support(double ***in)
 	printf("Number and change in number of support voxels: %d\t%d\n", curr_num_supp, diff_num_supp) ;
     return diff_num_supp ;
 	}
-
-/*
-void proj2_with_volume_constraint( double ***in, double ***out )
-	{
-	int i, j, k, is, js, ks, s, pivPos, L, R ;
-	double val, cutoff, piv, b, c ;
-
-	for (i = 0 ; i < size ; ++i)
-	for (j = 0 ; j < size ; ++j)
-	for (k = 0 ; k < size ; ++k)
-        out[i][j][k] = 0. ;
-
-	for (i = 0 ; i < len_supp ; ++i)
-	for (j = 0 ; j < len_supp ; ++j)
-	for (k = 0 ; k < len_supp ; ++k)
-        {
-        ord[(len_supp * i + j) * len_supp + k] = (len_supp * i + j) * len_supp + k;
-        tempx[(len_supp * i + j) * len_supp + k] = in[i][j][k] ;
-        }
-	
-    i = 0 ; beg[0] = 0 ; end[0] = len_supp*len_supp*len_supp ;
-	while (i >= 0) 
-		{
-		L = beg[i] ; R = end[i] - 1 ;
-		
-		if (L < R) 
-			{
-			piv = tempx[L] ; pivPos = ord[L] ; 
-			while (L < R) 
-				{
-				while (tempx[R] >= piv && L < R) R-- ; 
-				if (L < R) 
-					{ ord[L] = ord[R] ; tempx[L++] = tempx[R] ; } 
-
-				while (tempx[L] <= piv && L < R) L++ ; 
-				if (L < R) 
-					{ ord[R] = ord[L] ; tempx[R--] = tempx[L] ; } 
-				}
-			tempx[L] = piv ; ord[L] = pivPos ; beg[i+1] = L+1 ; end[i+1] = end[i] ; end[i++] = L; 
-			}
-		else 
-			i--; 
-		}
-
-    cutoff = tempx[len_supp*len_supp*len_supp - num_supp] ;
-     
-	for (i = 0 ; i < len_supp ; ++i)
-	for (j = 0 ; j < len_supp ; ++j)
-	for (k = 0 ; k < len_supp ; ++k)
-        {
-        out[i][j][k] = (in[i][j][k] >= cutoff) ? in[i][j][k] : 0. ;
-        }
-	}
-*/
-
-/*
-void shrink_support(double ***in)
-    {
-    int s, is, js, ks ;
-    double mean_1, mean_2, c_mean_1, c_mean_2, t_mean_1, t_mean_2 ;
-    double update_err, val, tot_support ;
-    mean_1 = .1 ;
-    mean_2 = 0. ;
-    update_err = 10. ;
-    //K-means inside spherical support to 
-    //determine number of significant voxels 
-    while (update_err > 1.E-4)
-        {
-        c_mean_1 = c_mean_2 = 0. ;
-        t_mean_1 = t_mean_2 = 0. ;
-        for (s = 0 ; s < num_supp ; s++)
-            {
-            is = supp[s][0] ;
-            js = supp[s][1] ;
-            ks = supp[s][2] ;
-            val = in[is][js][ks] ;
-            if (fabs(val - mean_1) < fabs(val - mean_2))
-                  {
-                  t_mean_1 += val ;
-                  c_mean_1 += 1. ;
-                  }
-            else
-                  {
-                  t_mean_2 += val ;
-                  c_mean_2 += 1. ;
-                  }
-            }
-		if (c_mean_1 > 0.)
-        	t_mean_1 /= c_mean_1 ;
-		if (c_mean_2 > 0.)
-        	t_mean_2 /= c_mean_2 ;
-        update_err = fabs(t_mean_1 - mean_1) + fabs(t_mean_2 - mean_2) ;
-        mean_1 = t_mean_1 ;
-        mean_2 = t_mean_2 ;
-        }
-    //Mean_1 should be > mean_2
-    if (t_mean_1 > t_mean_2) 
-        {
-        mean_1 = t_mean_1 ; 
-        mean_2 = t_mean_2 ;
-        }
-    else 
-        {
-        mean_2 = t_mean_1 ; 
-        mean_1 = t_mean_2 ;
-        }
-
-    //Set support flag based on mean partitions
-	tot_support = 0. ;
-    for (s = 0 ; s < num_supp ; s++)
-        {
-        is = supp[s][0] ;
-        js = supp[s][1] ;
-        ks = supp[s][2] ;
-        val = in[is][js][ks] ;
-        if (fabs(val - mean_1) < fabs(val - mean_2))
-            {
-            supp_flag[s] = 1 ;
-			tot_support += 1. ;
-            }
-        else
-            supp_flag[s] = 0 ;
-        }
-	printf("%lf support pixels, %lf,\t%lf\n", tot_support, mean_1, mean_2) ;	
-    //Extend the padding to enforce continuity?
-    }
-*/  
-
