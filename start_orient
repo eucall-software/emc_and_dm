@@ -4,6 +4,7 @@ TMP=/mnt/cbis/images/duaneloh/S2E/tmp/kane_30fs_noCompton/
 INPUT=/mnt/cbis/images/duaneloh/S2E/sim_5kev_30fs_35_2NIP_EMC_noCompton/diffr/ 
 
 SLEEPDUR=60
+./compile_EMC
 for i in `seq 1 5`;
 do
 	nohup python runEMC.py -s $SRC -T $TMP -i $INPUT &
