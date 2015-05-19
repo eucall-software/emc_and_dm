@@ -100,7 +100,7 @@ def show_support(support):
 if __name__ == "__main__":
     parser = OptionParser()
     parser.add_option("-d", "--diagnostic_imgs", action="store_true", dest="make_diag_imgs", default=False, help="create images from intermediate files")
-    parser.add_option("-m", "--merge_imgs", action="store_true", dest="make_merge_imgs", default=False, help="create images from merging intensities")
+    parser.add_option("-m", "--merge_imgs", action="store_true", dest="merge_imgs", default=False, help="create images from merging intensities")
     parser.add_option("-f", "--file_name", dest="tmp_fn", default="orient.h5", help="name of temporary file from EMC recon")
     (op, args) = parser.parse_args()
 
@@ -159,8 +159,8 @@ if __name__ == "__main__":
         print "Images saved in %s" % tarBallName
 
     # Make images from merging individual reconstructions
-    # only if make_merge_imgs option is true
-    if op.make_merge_imgs:
+    # only if merge_imgs option is true
+    if op.merge_imgs:
         (rows, cols)= (3, max([2,num_dirs/3+1]))
         M.rcParams.update({'font.size': 13})
         fig, ax     = plt.subplots(rows, cols, sharex=True, sharey=True, figsize=(2.5*cols, 2.5*rows))
