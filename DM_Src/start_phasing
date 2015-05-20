@@ -3,5 +3,27 @@ SRC=/mnt/cbis/images/duaneloh/S2E/Src_kane/
 TMP=/mnt/cbis/images/duaneloh/S2E/tmp/kane_30fs_noCompton/
 INPUT=/mnt/cbis/images/duaneloh/S2E/sim_5kev_30fs_35_2NIP_EMC_noCompton/diffr/ 
 OUTPUT=/mnt/cbis/images/duaneloh/S2E/tmp/kane_30fs_noCompton/
+PWD=`pwd`
 
-nohup python runDM.py -s ${SRC} -T ${TMP} -i ${INPUT} -o ${OUTPUT}&
+NUMTRIALS=100
+STARTAVE=15
+NUMITER=50
+LEASH=0.2
+SHRINKCYCLES=10
+
+SLEEPDUR=60
+NUMRECON=1
+
+#Compiles exectuables in the SRC directory; 
+#needed for runDM.py script.
+cd ${SRC}
+./compile_DM
+cd ${PWD}
+   
+#Starts multiple reconstructions 
+for i in `seq 1 ${NUMRECON}`;
+do
+    echo "Starting reconstruction ${i}."
+    nohup python runDM.py -s ${SRC} -T ${TMP} -i ${INPUT} -o ${OUTPUT} -t ${NUMTRIALS} -a ${STARTAVE} -n ${NUMITER} -l ${LEASH} -c ${SHRINKCYCLES} &
+	sleep ${SLEEPDUR}
+done

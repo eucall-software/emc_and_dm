@@ -53,7 +53,7 @@ fftw_plan forward_plan, backward_plan ;
 int size, qmax, len_supp, num_supp, shrink_interval ;
 double t_ave_count = 0., gl_ave_count = 0. ;
 double diff_t_ave ;
-double leash = 0. ;
+double leash = 0.2 ;
 int curr_num_supp, diff_support ;
 
 void print_recon() ;
@@ -76,22 +76,27 @@ void proj2( double***, double*** ) ;
 
 int main(int argc, char* argv[])
 	{
-	int shrinkwrap_iter, shrinkwrap_start_ave, shrink_cycles = 10, num_trials, iter, start_ave, i, t, c ;
+	int shrinkwrap_iter, shrinkwrap_start_ave, shrink_cycles, num_trials, iter, start_ave, i, t, c ;
 	double error, min_error, diff_t_ave_cutoff ;
 	FILE *fp ;
 
-	if ( argc == 4 )
+	if ( argc == 6 )
 		{
         num_trials      	= atoi(argv[1]) ;
 		iter            	= atoi(argv[2]) ;
 		start_ave       	= atoi(argv[3]) ;
+		leash       	    = atof(argv[4]) ;
+		shrink_cycles       = atoi(argv[5]) ;
 		}
 	else
 		{
 		printf("expected three arguments:\n" 
         "\tnum_trials\n"
         "\tnum_iter\n"
-        "\tstart_ave\n") ;
+        "\tstart_ave\n"
+        "\tleash_parameter\n"
+        "\tshrink_cycles\n"
+        ) ;
 		return 0 ;
 		}
 		
@@ -132,7 +137,7 @@ int main(int argc, char* argv[])
         } while(t < MAX_SUPP_REFINE_CYCLES) ;
 	*/
     // Reconstructions begin here
-    leash = 0.2;
+    //leash = 0.2;
 	for (c = 1 ; c <= shrink_cycles ; ++c)
 		{
 		reset_gl_ave() ;
@@ -144,6 +149,7 @@ int main(int argc, char* argv[])
 			fp = fopen(obj_buffer, "w") ;
 			fprintf(fp, "size = %d    len_supp = %d    num_supp = %d\n\n", size, len_supp, num_supp) ;
 			fclose(fp) ;
+
 			min_error = 1.E20 ;
 			randomize_state() ;
 			reset_t_ave() ;
@@ -840,5 +846,10 @@ int shrink_support(double ***in)
     diff_num_supp = new_num_supp - curr_num_supp ;
     curr_num_supp = new_num_supp ;
 	printf("Number and change in number of support voxels: %d\t%d\n", curr_num_supp, diff_num_supp) ;
+
+    fp = fopen("shrinkwrap.log", "a") ;
+    fprintf(fp, "supp_vox = %d \n", new_num_supp) ;
+    fclose(fp) ;
+
     return diff_num_supp ;
 	}

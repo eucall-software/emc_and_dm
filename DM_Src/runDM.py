@@ -30,9 +30,8 @@ parser.add_option("-o", "--outDir", action="store", type="string", dest="outDir"
 parser.add_option("-t", "--trials", action="store", type="int", dest="numTrials", help="", metavar="", default=100)
 parser.add_option("-a", "--start_ave", action="store", type="int", dest="startAve", help="", metavar="", default=15)
 parser.add_option("-n", "--iter", action="store", type="int", dest="numIter", help="", metavar="", default=50)
-
-parser.add_option("-p", action="store_true", dest="plot", default=True)
-parser.add_option("-d", action="store_true", dest="detailed", default=False)
+parser.add_option("-l", "--leash", action="store", type="float", dest="leash", help="", metavar="", default=0.2)
+parser.add_option("-c", "--shrinkCycles", action="store", type="int", dest="shrinkCycles", help="", metavar="", default=10)
 
 ct = time.localtime()
 currTimeStamp = "%04d_%02d_%02d_%02d_%02d_%02d"%(ct.tm_year, ct.tm_mon, ct.tm_mday, ct.tm_hour, ct.tm_min, ct.tm_sec)
@@ -142,6 +141,18 @@ def show_support(support):
     plt.show()
 
 
+def parse_shrinkwrap_log(shrinkwrap_fn):
+    fp = open(shrinkwrap_fn, "r")
+    lines = fp.readlines()
+    fp.close()
+    lst = []
+    for ll in lines:
+        m = re.match("supp_vox = (\d+)\s", ll)
+        if m:
+            (supp_size) = m.groups()
+            lst.append(int(supp_size))
+    return N.array(lst)
+
 def parse_error_log(err_fn):
     fp = open(err_fn, "r")
     lines = fp.readlines()[2:]
@@ -190,16 +201,21 @@ support     = support_from_autocorr(auto, qmax, a_0, a_1, supportFile)
 #Start phasing
 #Link executable from compiled version in srcDir to tmpDir
 os.chdir(op.tmpOutDir)
-os.system("./object_recon %d %d %d &"%(op.numTrials, op.numIter, op.startAve))
+inputOptions = (op.numTrials, op.numIter, op.startAve, op.leash, op.shrinkCycles)
+os.system("./object_recon %d %d %d %lf %d&"%inputOptions)
 
-min_objects = glob.glob("finish_min_object*.dat")
-logFiles    = glob.glob("object*.log")
-fin_object  = "finish_object.dat"
+min_objects     = glob.glob("finish_min_object*.dat")
+logFiles        = glob.glob("object*.log")
+shrinkWrapFile  = "shrinkwrap.log"
+fin_object      = "finish_object.dat"
 
 print "Done with reconstructions, now saving output from final shrink_cycle to h5 file"
-fp = h5py.File(outputFile, "w")
-g_err = fp.create_group("/history/error")
-g_data = fp.create_group("/history/object")
+fp          = h5py.File(outputFile, "w")
+g_data      = fp.create_group("data")
+g_params    = fp.create_group("params")
+g_supp      = fp.create_group("/history/support")
+g_err       = fp.create_group("/history/error")
+g_hist_obj  = fp.create_group("/history/object")
 for n, mo in enumerate(logFiles):
     err = parse_error_log(mo)
     g_err.create_dataset("%0.4d"%(n+1), data=err, compression="gzip")
@@ -207,16 +223,22 @@ for n, mo in enumerate(logFiles):
 
 for n, ob_fn in enumerate(min_objects):
     obj = extract_object(ob_fn)
-    g_data.create_dataset("%0.4d"%(n+1), data=obj, compression="gzip")
+    g_hist_obj.create_dataset("%0.4d"%(n+1), data=obj, compression="gzip")
     os.remove(mo)
 
+finish_object = extract_object("finish_object.dat")
+g_data.create_dataset("electronDensity", data=finish_object, compression="gzip")
+os.system("cp finish_object.dat start_object.dat")
+
+g_params.create_dataset("DM_support",           data=support, compression="gzip")
+g_params.create_dataset("DM_numTrials",         data=op.numTrials)
+g_params.create_dataset("DM_numIterPerTrial",   data=op.numIter)
+g_params.create_dataset("DM_startAvePerIter",   data=op.startAve)
+g_params.create_dataset("DM_leashParameter",    data=op.leash)
+g_params.create_dataset("DM_shrinkwrapCycles",  data=op.shrinkCycles)
+
+shrinkWrap = parse_shrinkwrap_log(shrinkWrapFile)
+fp.create_dataset("/history/shrinkwrap", data=shrinkWrap, compression="gzip")
+fp.create_dataset("version", data=h5py.version.hdf5_version)
+
 fp.close()
-#"/data/electronDensity" <- finish_object.dat
-# Make start_object.dat from finish_object.dat??
-#"/version"
-#"/params/"
-# Diff map iter, start_ave, num_trials,
-# Save leash_parameter ... Gotta include this into object_recon.c
-# Save shrink_cycles. Gotta include this into object_recon.c as well
-# Save initial_support.dat
-#Read output and stuff into h5 file.
