@@ -621,8 +621,8 @@ if not (os.path.isfile(os.path.join(op.tmpOutDir, "make_diagnostic_figures.py"))
 os.chdir(runInstanceDir)
 #Output file is kept in tmpOutDir,
 #a hard-linked version of this is kept in outDir
-outFile = os.path.join(op.tmpOutDir, "orient.h5")
-outFileHardLink = os.path.join(op.outDir, "orient.h5")
+outFile = os.path.join(op.tmpOutDir, "orient_out_" + op.timeStamp +".h5")
+outFileHardLink = os.path.join(op.outDir, "orient_out_" + op.timeStamp +".h5")
 offset_iter = 0
 if not (os.path.isfile(outFile)):
     f = h5py.File(outFile, "w")

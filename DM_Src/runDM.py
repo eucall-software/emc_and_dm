@@ -22,7 +22,7 @@ cwd = os.getcwd()+"/"
 
 parser = OptionParser()
 
-parser.add_option("-i", "--inDir", action="store", type="string", dest="inputDir", help="absolute path to input diffraction frames (diffr*.h5)", metavar="", default=cwd)
+parser.add_option("-i", "--inDir", action="store", type="string", dest="inputDir", help="absolute path to input intensities (orient_out.h5)", metavar="", default=cwd)
 parser.add_option("-s", "--srcDir", action="store", type="string", dest="srcDir", help="absolute path to source files for executables", metavar="", default=cwd)
 parser.add_option("-T", "--tmpOutDir", action="store", type="string", dest="tmpOutDir", help="temporary directory to store intermediate states of calculation", metavar="", default=cwd)
 parser.add_option("-o", "--outDir", action="store", type="string", dest="outDir", help="absolute path to output", metavar="", default=cwd)
@@ -173,14 +173,14 @@ def extract_object(object_fn):
 
 create_directory(op.tmpOutDir)
 create_directory(op.outDir)
-runInstanceDir = os.path.join(op.tmpOutDir, "phase_" + op.timeStamp + "/")
+runInstanceDir = os.path.join(op.tmpOutDir, "phase_out_" + op.timeStamp + "/")
 create_directory(runInstanceDir, err_msg=" Assuming that you are continuing a previous reconstruction.")
 
 outputLog           = os.path.join(runInstanceDir, "phasing.log")
 supportFile         = os.path.join(runInstanceDir, "support.dat")
-inputIntensityFile  = os.path.join(op.inputDir, "orient.h5")
+inputIntensityFile  = glob.glob(os.path.join(op.inputDir, "orient_out*.h5"))[0]
 intensityTmpFile    = os.path.join(runInstanceDir, "object_intensity.dat")
-outputFile          = os.path.join(op.outDir, "phase.h5")
+outputFile          = os.path.join(op.outDir, "phase_out_" + op.timeStamp + ".h5")
 
 #Read intensity and translate into ASCII *.dat format
 (qmax, t_intens, intens_len, qPos, qPos_full) = load_intensities(inputIntensityFile)
@@ -196,9 +196,8 @@ print "Using 2-means clustering to determine significant voxels in autocorrelati
 print "Determining support from autocorrelation (will write to support.dat by default)..."
 support     = support_from_autocorr(auto, qmax, a_0, a_1, supportFile)
 
-#TODO:
-#Store parameters into phasing.log.
 #Start phasing
+#Store parameters into phase_out.h5.
 #Link executable from compiled version in srcDir to tmpDir
 os.chdir(op.tmpOutDir)
 inputOptions = (op.numTrials, op.numIter, op.startAve, op.leash, op.shrinkCycles)
