@@ -1,8 +1,8 @@
 #!/bin/bash
-SRC=/mnt/cbis/images/duaneloh/S2E/Src_kane/
-INPUT=/mnt/cbis/images/duaneloh/S2E/sim_5kev_30fs_35_2NIP_EMC_noCompton/diffr/ 
-TMP=/mnt/cbis/images/duaneloh/S2E/tmp/kane_30fs_noCompton/
-OUTPUT=/mnt/cbis/images/duaneloh/S2E/tmp/kane_30fs_noCompton/
+SRC=/data/S2E/packages/s2e_recon/EMC_Src
+INPUT=/data/S2E/data/sim_example/diffr
+TMP=/data/S2E/tmp
+OUTPUT=/data/S2E/data/sim_example
 PWD=`pwd`
 
 INITIALQUAT=5
@@ -22,10 +22,10 @@ cd ${PWD}
 
 #Let's parse some options.
 OPTS="-s ${SRC} -T ${TMP} -i ${INPUT} -o ${OUTPUT} -q ${INITIALQUAT} -Q ${MAXQUAT} -m ${MAXITER} -e ${MINERR} "
-ADDOPT=""
+ADDOPT=" "
 [$PLOT -eq 1] && {ADDOPT="${ADDOPT} -p"} 
 [$DETAILED -eq 1] && {ADDOPT="${ADDOPT} -d"}
-OPTS="${OPTS} + ${ADDOPT}"
+OPTS="${OPTS} ${ADDOPT}"
 
 #Starts multiple reconstructions 
 for i in `seq 1 ${NUMRECON}`;

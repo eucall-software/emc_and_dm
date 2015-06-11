@@ -41,9 +41,11 @@ parser.add_option("-m", "--maxIterations", action="store", type="int", dest="max
 
 parser.add_option("-e", "--minError", action="store", type="float", dest="minError", help="minimum error for terminating iterative intensity reconstructions", metavar="", default=4.E-8)
 
-parser.add_option("-p", action="store_true", dest="plot", default=True)
+parser.add_option("-p", action="store_true", dest="plot", default=True,
+help="plot figures")
 
-parser.add_option("-d", action="store_true", dest="detailed", default=False)
+parser.add_option("-d", action="store_true", dest="detailed", default=False,
+help="do detailed reconstruction")
 
 ct = time.localtime()
 currTimeStamp = "%04d_%02d_%02d_%02d_%02d_%02d"%(ct.tm_year, ct.tm_mon, ct.tm_mday, ct.tm_hour, ct.tm_min, ct.tm_sec)
@@ -57,7 +59,10 @@ runLogFile = os.path.join(op.tmpOutDir, op.timeStamp + ".log")
 ################################################################################
 
 def print_to_log(msg, log_file=runLogFile):
-    fp = open(log_file, "a")
+    if not os.path.exists(log_file):
+        fp = open(log_file, "w")
+    else:
+        fp = open(log_file, "a")
     t_msg = time.asctime() + ":: " + msg
     fp.write(t_msg)
     fp.write("\n")
@@ -265,7 +270,7 @@ class EMCCaseGenerator(object):
         """
         # Log: destination output to file
         msg = time.asctime() + ":: " +"Writing diffr output to %s"%outFN
-        print_to_log(self.runLog, msg)
+        print_to_log(msg, log_file=self.runLog)
 
         # Define in-plane detector x,y coordinates
         [x,y] = N.mgrid[-self.numPixToEdge:self.numPixToEdge+1, -self.numPixToEdge:self.numPixToEdge+1]
@@ -299,14 +304,14 @@ class EMCCaseGenerator(object):
 
         # Start stepping through diffraction images and writing them to sparse format
         msg = time.asctime() + ":: " +"Average intensities: %lf"%(totPhoton)
-        print_to_log(self.runLog, msg)
+        print_to_log(msg, log_file=self.runLog)
         outf = open(outFN, "w")
         outf.write("%d %lf \n"%(len(fileList), meanPhoton))
         mask = flatMask.reshape(2*self.numPixToEdge+1, -1)
         avg = 0.*mask
 
         msg = time.asctime() + ":: " +"Converting individual data frames to sparse format %s"%("."*20)
-        print_to_log(self.runLog, msg)
+        print_to_log(msg, log_file=self.runLog)
 
         for n,fn in enumerate(fileList):
             try:
@@ -335,11 +340,11 @@ class EMCCaseGenerator(object):
                 f.close()
             except:
                 msg = time.asctime() + ":: " +"Failed to read file %"%n
-                print_to_log(self.runLog, msg)
+                print_to_log(msg, log_file=self.runLog)
 
             if n%10 == 0:
                 msg = time.asctime() + ":: " +"Translated %d patterns"%n
-                print_to_log(self.runLog, msg)
+                print_to_log(msg, log_file=self.runLog)
 
         outf.close()
 
@@ -361,7 +366,7 @@ class EMCCaseGenerator(object):
             plt.show()
         else:
             msg = time.asctime() + ":: " + "Detector not initiated."
-            print_to_log(self.runLog, msg)
+            print_to_log(msg, log_file=self.runLog)
 
     # The following functions have not been tested. Use with caution!!!
     def makeTestParticleAndSupport(self, inParticleRadius=5.9, inDamping=1.5, inFrac=0.5, inPad=1.8):
@@ -432,7 +437,7 @@ class EMCCaseGenerator(object):
         self.numPixToEdge = N.floor(self.qmax / N.sqrt(zSq/(1.+zSq) + (zSq/N.sqrt(1+zSq) -self.z)))
         self.detectorDist = self.z * self.numPixToEdge
         msg = time.asctime() + ":: " +"(qmin, qmax, detectorDist)=(%lf, %lf, %lf)"%(self.qmin, self.qmax, self.detectorDist)
-        print_to_log(self.runLog, msg)
+        print_to_log(msg, log_file=self.runLog)
 
         #make detector
         [x,y] = N.mgrid[-self.numPixToEdge:self.numPixToEdge+1, -self.numPixToEdge:self.numPixToEdge+1]
@@ -601,7 +606,7 @@ else:
 
 
 msg = time.asctime() + ":: " +"Creating symbolic link to crucial files in output subdirectory, " + runInstanceDir
-print_to_log(runLogFile, msg)
+print_to_log(msg, log_file=runLogFile)
 if not (os.path.isfile(os.path.join(runInstanceDir,"detector.dat"))):
     os.symlink(os.path.join(op.tmpOutDir,"detector.dat"), os.path.join(runInstanceDir,"detector.dat"))
 if not (os.path.isfile(os.path.join(runInstanceDir,"photons.dat"))):
