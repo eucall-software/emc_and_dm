@@ -24,6 +24,6 @@ cd ${PWD}
 for i in `seq 1 ${NUMRECON}`;
 do
     echo "Starting reconstruction ${i}."
-    nohup python runDM.py -s ${SRC} -T ${TMP} -i ${INPUT} -o ${OUTPUT} -t ${NUMTRIALS} -a ${STARTAVE} -n ${NUMITER} -l ${LEASH} -c ${SHRINKCYCLES} &
+    nohup python runDM.py -s ${SRC} -T ${TMP} -i ${INPUT} -o ${OUTPUT} -r ${NUMTRIALS} -a ${STARTAVE} -n ${NUMITER} -l ${LEASH} -c ${SHRINKCYCLES} &
 	sleep ${SLEEPDUR}
 done

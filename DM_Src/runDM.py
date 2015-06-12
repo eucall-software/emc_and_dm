@@ -27,7 +27,7 @@ parser.add_option("-s", "--srcDir", action="store", type="string", dest="srcDir"
 parser.add_option("-T", "--tmpOutDir", action="store", type="string", dest="tmpOutDir", help="temporary directory to store intermediate states of calculation", metavar="", default=cwd)
 parser.add_option("-o", "--outDir", action="store", type="string", dest="outDir", help="absolute path to output", metavar="", default=cwd)
 
-parser.add_option("-t", "--trials", action="store", type="int", dest="numTrials", help="", metavar="", default=100)
+parser.add_option("-r", "--trials", action="store", type="int", dest="numTrials", help="", metavar="", default=100)
 parser.add_option("-a", "--start_ave", action="store", type="int", dest="startAve", help="", metavar="", default=15)
 parser.add_option("-n", "--iter", action="store", type="int", dest="numIter", help="", metavar="", default=50)
 parser.add_option("-l", "--leash", action="store", type="float", dest="leash", help="", metavar="", default=0.2)

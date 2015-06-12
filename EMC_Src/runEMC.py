@@ -628,6 +628,7 @@ os.chdir(runInstanceDir)
 #a hard-linked version of this is kept in outDir
 outFile = os.path.join(op.tmpOutDir, "orient_out_" + op.timeStamp +".h5")
 outFileHardLink = os.path.join(op.outDir, "orient_out_" + op.timeStamp +".h5")
+#TODO: Need to hardlink this output file
 offset_iter = 0
 if not (os.path.isfile(outFile)):
     f = h5py.File(outFile, "w")

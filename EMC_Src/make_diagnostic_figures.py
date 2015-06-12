@@ -104,19 +104,18 @@ if __name__ == "__main__":
     parser.add_option("-f", "--file_name", dest="tmp_fn", default="orient.h5", help="name of temporary file from EMC recon")
     (op, args) = parser.parse_args()
 
-    #TODO: Keep functions that compare multiple reconstructions. Eg. merging.
     # Scan directories for reconstructions that were done.
     # Reference directory is the zeroth (or first) one.
-    dirs        = glob.glob("20*/")
+    dirs        = glob.glob("orient_*/")
     cwd         = os.getcwd()
     curr_dir    = dirs[0]
+    #TODO: The curr_file should not be in the tmp file, but the final file
     curr_file   = os.path.join(curr_dir, op.tmp_fn)
     print "Will read default parameters from reconstruction in " + curr_dir
 
     (qmax, t_intens, intens_len, qPos, qPos_full) = load_reference_intensites(curr_file)
     quats       = load_quaternions(os.path.join(curr_dir, "quaternion.dat"))
 
-    #TODO: Something is funky about the qmax intensities...
     num_dirs        = len(dirs)
     intens_stack    = N.zeros((num_dirs, intens_len, intens_len, intens_len))
     intens_stack[0] = t_intens.copy()
@@ -148,9 +147,18 @@ if __name__ == "__main__":
             os.chdir(dir)
             print "="*80
             print "Making images for %s "%dir + "."*20
-            VR.make_panel_of_intensity_slices(op.tmp_fn, c_n=16)
-            VR.make_error_time_plot(op.tmp_fn)
-            VR.make_mutual_info_plot(op.tmp_fn)
+            try:
+                VR.make_panel_of_intensity_slices(op.tmp_fn, c_n=16)
+            except:
+                print "Making of intensity slices failed!"
+            try:
+                VR.make_error_time_plot(op.tmp_fn)
+            except:
+                print "Making of error+time plot failed!"
+            try:
+                VR.make_mutual_info_plot(op.tmp_fn)
+            except:
+                print "Making of mutual information plot failed!"
             print "="*80
             os.chdir(cwd)
 

@@ -1,0 +1,64 @@
+This package contains an EMC and a Difference map implementation for simS2E.
+Here are their descriptions.
+
+================================================================================
+The EMC module is stored in EMC_Src. 
+================================================================================
+Contains:
+    start_orient
+    compile_EMC
+    EMC.c
+    runEMC.py
+    make_diagnostic_figures.py
+    [dir]quaternions
+    [dir]supp_py_modules
+
+Requirements:
+    gcc, cmath library
+    Python2.7
+    Cython
+    openmp
+
+Quick start:
+Modify "start_orient" to customize orientation recovery. 
+For example, for the option to produce error plots.
+
+./start_orient
+    - uses "compile_EMC" to compile EMC.c into executable "EMC"
+    - uses "compile_EMC" to compile Cython files in supp_py_modules
+    - starts orientation recovery with Python script "runEMC.py"
+        runEMC.py
+            - converts h5 diffraction data to sparse photon.dat in tmp dir.
+            - also creates detector.dat in tmp dir.
+            - uses EMC executable iteratively and saves output in tmp dir.
+            - returns simS2E standard output in orient_YYYY_MM_DD_hh_mm_ss.h5
+
+Run make_diagnostic figures if multiple reconstructions were attempted.
+- Navigate to the tmp directory (specified in "start_orient" script)
+- In the tmp directory, run this following command for help
+    python make_diagnostic_figures.py -h  
+
+================================================================================
+The Difference map phase retrieval module is stored in DM_Src. 
+================================================================================
+
+Contains:
+    start_phasing
+    compile_DM
+    object_recon.c
+    runDM.py
+
+Requirements:
+    gcc, cmath library
+    fftw
+    Python2.7
+
+Quick start:
+Modify "start_phasing" to customize iterative phase retrieval.
+
+./start_phasing
+    - uses "compile_DM" to compile "object_recon.c" into executable
+      "object_recon"
+    - uses "runDM.py" to start iterative phase retrieval.
+        runDM.py
+            - creates a 
