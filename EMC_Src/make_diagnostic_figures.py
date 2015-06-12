@@ -12,7 +12,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from mpl_toolkits.mplot3d import Axes3D
 
 def load_reference_intensites(ref_file):
-    t_intens = (read.extract_final_arr_from_h5(ref_file, "/history/intensities")).astype("float")
+    t_intens = (read.extract_arr_from_h5(ref_file, "/data/data")).astype("float")
     intens_len = len(t_intens)
     qmax    = intens_len/2
     (q_low, q_high) = (15, int(0.9*qmax))
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     parser = OptionParser()
     parser.add_option("-d", "--diagnostic_imgs", action="store_true", dest="make_diag_imgs", default=False, help="create images from intermediate files")
     parser.add_option("-m", "--merge_imgs", action="store_true", dest="merge_imgs", default=False, help="create images from merging intensities")
-    parser.add_option("-f", "--file_name", dest="tmp_fn", default="orient.h5", help="name of temporary file from EMC recon")
+    parser.add_option("-f", "--file_name", dest="tmp_fn", default="orient*.h5", help="name of temporary file from EMC recon")
     (op, args) = parser.parse_args()
 
     # Scan directories for reconstructions that were done.
@@ -109,9 +109,8 @@ if __name__ == "__main__":
     dirs        = glob.glob("orient_*/")
     cwd         = os.getcwd()
     curr_dir    = dirs[0]
-    #TODO: The curr_file should not be in the tmp file, but the final file
-    curr_file   = os.path.join(curr_dir, op.tmp_fn)
-    print "Will read default parameters from reconstruction in " + curr_dir
+    curr_file   = glob.glob(os.path.join(curr_dir, op.tmp_fn))[0]
+    print "Will read default parameters from reconstruction in " + curr_file
 
     (qmax, t_intens, intens_len, qPos, qPos_full) = load_reference_intensites(curr_file)
     quats       = load_quaternions(os.path.join(curr_dir, "quaternion.dat"))
@@ -128,7 +127,7 @@ if __name__ == "__main__":
         dir         = dirs[dir_ct]
         t0          = time.time()
         curr_file   = os.path.join(dir, op.tmp_fn)
-        c_intens    = (read.extract_final_arr_from_h5(curr_file, "/history/intensities")).astype("float")
+        c_intens    = (read.extract_arr_from_h5(curr_file, "/data/data")).astype("float")
         cc_intens   = (c_intens>0.)*c_intens
         cc_intens   /= cc_intens.max()
         cc_intens   = N.abs(N.log(cc_intens+i_off))

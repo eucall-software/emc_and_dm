@@ -29,6 +29,13 @@ def extract_arr_from_h5(fn, tag, n=9):
     fp.close()
     return N.array(temp)
 
+def extract_arr_from_h5(fn, tag):
+    fp          = h5py.File(fn, 'r')
+    print fn
+    print tag
+    temp        = fp[tag].value
+    return temp
+
 def extract_final_arr_from_h5(fn, tag):
     fp          = h5py.File(fn, 'r')
     keys        = fp[tag].keys()
