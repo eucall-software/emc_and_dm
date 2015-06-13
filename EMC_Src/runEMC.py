@@ -41,14 +41,11 @@ parser.add_option("-m", "--maxIterations", action="store", type="int", dest="max
 
 parser.add_option("-e", "--minError", action="store", type="float", dest="minError", help="minimum error for terminating iterative intensity reconstructions", metavar="", default=4.E-8)
 
-parser.add_option("-b", action="store_true", dest="beamstop", default=False,
-help="apply beamstop in diffraction data")
+parser.add_option("-b", action="store_true", dest="beamstop", default=False, help="apply beamstop in diffraction data")
 
-parser.add_option("-p", action="store_true", dest="plot", default=True,
-help="plot figures")
+parser.add_option("-p", action="store_true", dest="plot", default=True, help="plot figures")
 
-parser.add_option("-d", action="store_true", dest="detailed", default=False,
-help="do detailed reconstruction")
+parser.add_option("-d", action="store_true", dest="detailed", default=False, help="do detailed reconstruction")
 
 ct = time.localtime()
 currTimeStamp = "%04d_%02d_%02d_%02d_%02d_%02d"%(ct.tm_year, ct.tm_mon, ct.tm_mday, ct.tm_hour, ct.tm_min, ct.tm_sec)
@@ -77,7 +74,7 @@ def create_directory(dir_name, logging=True, log_file=runLogFile, err_msg=""):
         if logging:
             print_to_log(dir_name + " exists! " + err_msg, log_file=log_file)
         else:
-            print dir_name + " exists! " 
+            print dir_name + " exists! "
     else:
         os.makedirs(dir_name)
         if logging:
@@ -751,9 +748,15 @@ while(currQuat <= op.maxQuat):
         f = open(outputLog, "a")
         f.write("%e\t %lf\n"%(diff, time_taken))
         f.close()
-        iter_num += 1
 
         os.system("cp finish_intensity.dat start_intensity.dat")
+
+        if (iter_num > 2) and op.plot:
+            msg = "Making error plot"
+            print_to_log(msg)
+            VR.make_error_time_plot(outFile)
+
+        iter_num += 1
 
     currQuat += 1
 
@@ -772,15 +775,3 @@ if op.plot:
         print "="*80
         print "Plotting mutual information and orientations to disk"
         VR.make_mutual_info_plot(outFile)
-
-    (qmax, t_intens, intens_len, qPos, qPos_full) = load_intensities(outFile)
-    avg_intens = t_intens
-    #avg_intens.tofile("object_intensity.dat", sep=" ")
-
-    print "Computing autocorrelation..."
-    avg_intens  = v_zero_neg(avg_intens.ravel()).reshape(avg_intens.shape)
-    auto        = N.fft.fftshift(N.abs(N.fft.fftn(N.fft.ifftshift(avg_intens))))
-    print "Using 2-means clustering to determine significant voxels in autocorrelation..."
-    (a_0, a_1)  = cluster_two_means(auto.ravel())
-    print "Determining support from autocorrelation (will write to support.dat by default)..."
-    support     = support_from_autocorr(auto, qmax, a_0, a_1)
