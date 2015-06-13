@@ -29,7 +29,7 @@ def extract_arr_from_h5(fn, tag, n=9):
     fp.close()
     return N.array(temp)
 
-def extract_arr_from_h5(fn, tag):
+def extract_value_from_h5(fn, tag):
     fp          = h5py.File(fn, 'r')
     print fn
     print tag

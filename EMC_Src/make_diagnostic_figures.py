@@ -12,7 +12,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from mpl_toolkits.mplot3d import Axes3D
 
 def load_reference_intensites(ref_file):
-    t_intens = (read.extract_arr_from_h5(ref_file, "/data/data")).astype("float")
+    t_intens = (read.extract_value_from_h5(ref_file, "/data/data")).astype("float")
     intens_len = len(t_intens)
     qmax    = intens_len/2
     (q_low, q_high) = (15, int(0.9*qmax))
@@ -123,39 +123,40 @@ if __name__ == "__main__":
     tt_intens       = (t_intens>0.)*t_intens
     tt_intens       /= tt_intens.max()
     tt_intens       = N.abs(N.log(tt_intens+i_off))
-    for dir_ct in range(num_dirs):
-        dir         = dirs[dir_ct]
-        t0          = time.time()
-        curr_file   = os.path.join(dir, op.tmp_fn)
-        c_intens    = (read.extract_arr_from_h5(curr_file, "/data/data")).astype("float")
-        cc_intens   = (c_intens>0.)*c_intens
-        cc_intens   /= cc_intens.max()
-        cc_intens   = N.abs(N.log(cc_intens+i_off))
-        scores      = rI.orient_two_intensities(tt_intens.ravel(), cc_intens.ravel(), qPos.ravel(), quats.ravel(), intens_len)
-        ml_quat     = quats[(scores.argsort())[0]]
-        out_intens  = N.zeros_like(cc_intens)
-        rI.interp_intensities(c_intens.ravel(), out_intens.ravel(), qPos_full.ravel(), ml_quat, intens_len)
-        t1          = time.time()
-        intens_stack[dir_ct] = out_intens.copy()
-        print "Done orienting intensity %d of %d. Took %lf s."%(dir_ct, num_dirs, t1-t0)
+   
+    if num_dirs > 1:
+        for dir_ct in range(num_dirs):
+            dir         = dirs[dir_ct]
+            t0          = time.time()
+            curr_file   = glob.glob(os.path.join(dir, op.tmp_fn))[0]
+            c_intens    = (read.extract_value_from_h5(curr_file, "/data/data")).astype("float")
+            cc_intens   = (c_intens>0.)*c_intens
+            cc_intens   /= cc_intens.max()
+            cc_intens   = N.abs(N.log(cc_intens+i_off))
+            scores      = rI.orient_two_intensities(tt_intens.ravel(), cc_intens.ravel(), qPos.ravel(), quats.ravel(), intens_len)
+            ml_quat     = quats[(scores.argsort())[0]]
+            out_intens  = N.zeros_like(cc_intens)
+            rI.interp_intensities(c_intens.ravel(), out_intens.ravel(), qPos_full.ravel(), ml_quat, intens_len)
+            t1          = time.time()
+            intens_stack[dir_ct] = out_intens.copy()
+            print "Done orienting intensity %d of %d. Took %lf s."%(dir_ct, num_dirs, t1-t0)
 
     # Make diagnostic images from individual reconstructions
     # only if make_diag_imgs option is true
     if op.make_diag_imgs:
         for dir in dirs:
             os.chdir(dir)
+            tmp_file = glob.glob(op.tmp_fn)[0]
+            print tmp_file
             print "="*80
             print "Making images for %s "%dir + "."*20
             try:
-                VR.make_panel_of_intensity_slices(op.tmp_fn, c_n=16)
+                VR.make_panel_of_intensity_slices(tmp_file, c_n=16)
             except:
                 print "Making of intensity slices failed!"
+            VR.make_error_time_plot(tmp_file)
             try:
-                VR.make_error_time_plot(op.tmp_fn)
-            except:
-                print "Making of error+time plot failed!"
-            try:
-                VR.make_mutual_info_plot(op.tmp_fn)
+                VR.make_mutual_info_plot(tmp_file)
             except:
                 print "Making of mutual information plot failed!"
             print "="*80
@@ -204,17 +205,3 @@ if __name__ == "__main__":
         img_name        = "merged.pdf"
         plt.savefig(img_name, bbox_inches='tight')
         plt.close(fig2)
-
-    #avg_intens = N.mean(intens_stack, axis=0)
-    avg_intens = t_intens
-    avg_intens.tofile("object_intensity.dat", sep=" ")
-
-    # Compute autocorrelation
-    print "Computing autocorrelation..."
-    avg_intens  = v_zero_neg(avg_intens.ravel()).reshape(avg_intens.shape)
-    auto        = N.fft.fftshift(N.abs(N.fft.fftn(N.fft.ifftshift(avg_intens))))
-    print "Using 2-means clustering to determine significant voxels in autocorrelation..."
-    (a_0, a_1)  = cluster_two_means(auto.ravel())
-    print "Determining support from autocorrelation (will write to support.dat by default)..."
-    support     = support_from_autocorr(auto, qmax, a_0, a_1)
-    # Somehow roll this into runPhasing.py

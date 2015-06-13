@@ -1,7 +1,7 @@
 #!/bin/bash
 SRC=/data/S2E/packages/s2e_recon/EMC_Src
 INPUT=/data/S2E/data/sim_example/diffr
-TMP=/data/S2E/tmp
+TMP=/data/S2E/tmp/orient
 OUTPUT=/data/S2E/data/sim_example
 PWD=`pwd`
 
@@ -9,6 +9,7 @@ INITIALQUAT=5
 MAXQUAT=9
 MAXITER=200
 MINERR="4.E-8"
+BEAMSTOP=1
 PLOT=1
 DETAILED=1
 
@@ -23,6 +24,7 @@ cd ${PWD}
 #Let's parse some options.
 OPTS="-s ${SRC} -T ${TMP} -i ${INPUT} -o ${OUTPUT} -q ${INITIALQUAT} -Q ${MAXQUAT} -m ${MAXITER} -e ${MINERR} "
 ADDOPT=" "
+[$BEAMSTOP -eq 1] && {ADDOPT="${ADDOPT} -b"} 
 [$PLOT -eq 1] && {ADDOPT="${ADDOPT} -p"} 
 [$DETAILED -eq 1] && {ADDOPT="${ADDOPT} -d"}
 OPTS="${OPTS} ${ADDOPT}"

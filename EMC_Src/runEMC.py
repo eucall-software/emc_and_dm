@@ -41,6 +41,9 @@ parser.add_option("-m", "--maxIterations", action="store", type="int", dest="max
 
 parser.add_option("-e", "--minError", action="store", type="float", dest="minError", help="minimum error for terminating iterative intensity reconstructions", metavar="", default=4.E-8)
 
+parser.add_option("-b", action="store_true", dest="beamstop", default=False,
+help="apply beamstop in diffraction data")
+
 parser.add_option("-p", action="store_true", dest="plot", default=True,
 help="plot figures")
 
@@ -52,7 +55,8 @@ currTimeStamp = "%04d_%02d_%02d_%02d_%02d_%02d"%(ct.tm_year, ct.tm_mon, ct.tm_md
 parser.add_option("-t", "--timeStamp", action="store", type="string", dest="timeStamp", help="time stamp to use for output", metavar="", default=currTimeStamp)
 
 (op, args) = parser.parse_args()
-runLogFile = os.path.join(op.tmpOutDir, op.timeStamp + ".log")
+runInstanceDir = os.path.join(op.tmpOutDir, "orient_" + op.timeStamp + "/")
+runLogFile = os.path.join(runInstanceDir, "orient_" + op.timeStamp + ".log")
 
 ################################################################################
 # Convenience functions for this script
@@ -68,12 +72,18 @@ def print_to_log(msg, log_file=runLogFile):
     fp.write("\n")
     fp.close()
 
-def create_directory(dir_name, log_file=runLogFile, err_msg=""):
+def create_directory(dir_name, logging=True, log_file=runLogFile, err_msg=""):
     if os.path.exists(dir_name):
-        print_to_log(dir_name + " exists! " + err_msg, log_file=log_file)
+        if logging:
+            print_to_log(dir_name + " exists! " + err_msg, log_file=log_file)
+        else:
+            print dir_name + " exists! " 
     else:
-        print_to_log("Creating " + dir_name, log_file=log_file)
         os.makedirs(dir_name)
+        if logging:
+            print_to_log("Creating " + dir_name, log_file=log_file)
+        else:
+            print "Creating " + dir_name
 
 def load_intensities(ref_file):
     fp      = h5py.File(ref_file, 'r')
@@ -269,7 +279,7 @@ class EMCCaseGenerator(object):
         Convert dense S2E file format to sparse EMC photons.dat format.
         """
         # Log: destination output to file
-        msg = time.asctime() + ":: " +"Writing diffr output to %s"%outFN
+        msg = "Writing diffr output to %s"%outFN
         print_to_log(msg, log_file=self.runLog)
 
         # Define in-plane detector x,y coordinates
@@ -303,14 +313,14 @@ class EMCCaseGenerator(object):
         totPhoton /= 1.*numFilesToAvgForMeanCount
 
         # Start stepping through diffraction images and writing them to sparse format
-        msg = time.asctime() + ":: " +"Average intensities: %lf"%(totPhoton)
+        msg = "Average intensities: %lf"%(totPhoton)
         print_to_log(msg, log_file=self.runLog)
         outf = open(outFN, "w")
         outf.write("%d %lf \n"%(len(fileList), meanPhoton))
         mask = flatMask.reshape(2*self.numPixToEdge+1, -1)
         avg = 0.*mask
 
-        msg = time.asctime() + ":: " +"Converting individual data frames to sparse format %s"%("."*20)
+        msg = "Converting individual data frames to sparse format %s"%("."*20)
         print_to_log(msg, log_file=self.runLog)
 
         for n,fn in enumerate(fileList):
@@ -339,11 +349,11 @@ class EMCCaseGenerator(object):
                 outf.write(' '.join([strNumO, ssO, strNumM, ssM]) + "\n")
                 f.close()
             except:
-                msg = time.asctime() + ":: " +"Failed to read file %"%n
+                msg = "Failed to read file %"%n
                 print_to_log(msg, log_file=self.runLog)
 
             if n%10 == 0:
-                msg = time.asctime() + ":: " +"Translated %d patterns"%n
+                msg = "Translated %d patterns"%n
                 print_to_log(msg, log_file=self.runLog)
 
         outf.close()
@@ -365,7 +375,7 @@ class EMCCaseGenerator(object):
             ax.set_zlim3d(-self.qmax, self.qmax)
             plt.show()
         else:
-            msg = time.asctime() + ":: " + "Detector not initiated."
+            msg = "Detector not initiated."
             print_to_log(msg, log_file=self.runLog)
 
     # The following functions have not been tested. Use with caution!!!
@@ -448,7 +458,10 @@ class EMCCaseGenerator(object):
         #make beamstop
         fQmin = N.floor(self.qmin)
         [x,y,z] = N.mgrid[-fQmin:fQmin+1, -fQmin:fQmin+1, -fQmin:fQmin+1]
-        tempBeamstop = [[i,j,k] for i,j,k in zip(x.flat, y.flat, z.flat) if (N.sqrt(i*i + j*j + k*k) < (self.qmin - N.sqrt(3.)))]
+        if op.beamstop:
+            tempBeamstop = [[i,j,k] for i,j,k in zip(x.flat, y.flat, z.flat) if (N.sqrt(i*i + j*j + k*k) < (self.qmin - N.sqrt(3.)))]
+        else:
+            tempBeamstop = [[0,0,0]]
         self.beamstop = N.array(tempBeamstop).astype(int)
 
     def diffractTestCase(self, inMaxScattAngDeg=45., inSigma=6.0, inQminNumShannonPix=1.4302966531242025):
@@ -562,15 +575,14 @@ gen = EMCCaseGenerator()
 ###############################################################
 # Check that subdirectories for intermediate output exist
 ###############################################################
-create_directory(op.tmpOutDir)
-create_directory(op.outDir)
-runInstanceDir = os.path.join(op.tmpOutDir, "orient_" + op.timeStamp + "/")
+create_directory(op.tmpOutDir, logging=False)
+create_directory(op.outDir, logging=False)
 create_directory(runInstanceDir, err_msg=" Assuming that you are continuing a previous reconstruction.")
 
 outputLog           = os.path.join(runInstanceDir, "EMC_extended.log")
 photonFiles         = glob.glob(os.path.join(op.inputDir,"diffr*.h5"))
 sparsePhotonFile    = os.path.join(op.tmpOutDir, "photons.dat")
-avgPatternFile      = os.path.join(op.tmpOutDir, "photons.h5")
+avgPatternFile      = os.path.join(op.tmpOutDir, "avg_photon.h5")
 detectorFile        = os.path.join(op.tmpOutDir, "detector.dat")
 lockFile            = os.path.join(op.tmpOutDir, "write.lock")
 
@@ -626,9 +638,8 @@ if not (os.path.isfile(os.path.join(op.tmpOutDir, "make_diagnostic_figures.py"))
 os.chdir(runInstanceDir)
 #Output file is kept in tmpOutDir,
 #a hard-linked version of this is kept in outDir
-outFile = os.path.join(runInstanceDir, "orient_out_" + op.timeStamp +".h5")
+outFile = os.path.join(op.tmpOutDir, "orient_out_" + op.timeStamp +".h5")
 outFileHardLink = os.path.join(op.outDir, "orient_out_" + op.timeStamp +".h5")
-#TODO: Need to hardlink this output file
 offset_iter = 0
 if not (os.path.isfile(outFile)):
     f = h5py.File(outFile, "w")

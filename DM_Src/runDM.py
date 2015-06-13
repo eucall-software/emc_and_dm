@@ -26,8 +26,11 @@ parser.add_option("-i", "--inDir", action="store", type="string", dest="inputDir
 parser.add_option("-s", "--srcDir", action="store", type="string", dest="srcDir", help="absolute path to source files for executables", metavar="", default=cwd)
 parser.add_option("-T", "--tmpOutDir", action="store", type="string", dest="tmpOutDir", help="temporary directory to store intermediate states of calculation", metavar="", default=cwd)
 parser.add_option("-o", "--outDir", action="store", type="string", dest="outDir", help="absolute path to output", metavar="", default=cwd)
+parser.add_option("-f", "--intensFile", action="store", type="string",
+dest="intensFile", help="file name of oriented 3D intensities", metavar="",
+default="orient_out*.h5")
 
-parser.add_option("-r", "--trials", action="store", type="int", dest="numTrials", help="", metavar="", default=100)
+parser.add_option("-r", "--trials", action="store", type="int", dest="numTrials", help="", metavar="", default=500)
 parser.add_option("-a", "--start_ave", action="store", type="int", dest="startAve", help="", metavar="", default=15)
 parser.add_option("-n", "--iter", action="store", type="int", dest="numIter", help="", metavar="", default=50)
 parser.add_option("-l", "--leash", action="store", type="float", dest="leash", help="", metavar="", default=0.2)
@@ -51,12 +54,14 @@ def print_to_log(msg, log_file=runLogFile):
     fp.write("\n")
     fp.close()
 
-def create_directory(dir_name, log_file=runLogFile, err_msg=""):
+def create_directory(dir_name, logging=True, log_file=runLogFile, err_msg=""):
     if os.path.exists(dir_name):
-        print_to_log(dir_name + " exists! " + err_msg, log_file=log_file)
+        if logging:
+            print_to_log(dir_name + " exists! " + err_msg, log_file=log_file)
     else:
-        print_to_log("Creating " + dir_name, log_file=log_file)
         os.makedirs(dir_name)
+        if logging:
+            print_to_log("Creating " + dir_name, log_file=log_file)
 
 def load_intensities(ref_file):
     fp      = h5py.File(ref_file, 'r')
@@ -171,14 +176,14 @@ def extract_object(object_fn):
     l = int(round(s**(1./3.)))
     return tmp.reshape(l,l,l)
 
-create_directory(op.tmpOutDir)
-create_directory(op.outDir)
+create_directory(op.tmpOutDir, logging=False)
+create_directory(op.outDir, logging=False)
 runInstanceDir = os.path.join(op.tmpOutDir, "phase_out_" + op.timeStamp + "/")
 create_directory(runInstanceDir, err_msg=" Assuming that you are continuing a previous reconstruction.")
 
 outputLog           = os.path.join(runInstanceDir, "phasing.log")
 supportFile         = os.path.join(runInstanceDir, "support.dat")
-inputIntensityFile  = glob.glob(os.path.join(op.inputDir, "orient_out*.h5"))[0]
+inputIntensityFile  = glob.glob(os.path.join(op.inputDir, op.intensFIle))[0]
 intensityTmpFile    = os.path.join(runInstanceDir, "object_intensity.dat")
 outputFile          = os.path.join(op.outDir, "phase_out_" + op.timeStamp + ".h5")
 
