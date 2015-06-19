@@ -43,7 +43,7 @@ parser.add_option("-e", "--minError", action="store", type="float", dest="minErr
 
 parser.add_option("-b", action="store_true", dest="beamstop", default=False, help="apply beamstop in diffraction data")
 
-parser.add_option("-p", action="store_true", dest="plot", default=True, help="plot figures")
+parser.add_option("-p", action="store_true", dest="plot", default=False, help="plot figures")
 
 parser.add_option("-d", action="store_true", dest="detailed", default=False, help="do detailed reconstruction")
 
@@ -724,10 +724,10 @@ while(currQuat <= op.maxQuat):
 
         gg = f["history/error"]
         gg.create_dataset("%04d"%(iter_num + offset_iter), data=diff)
+        print_to_log("rms change in intensities %e"%(diff))
 
         gg = f["history/angle"]
         gg.create_dataset("%04d"%(iter_num + offset_iter), data=most_likely_orientations, compression="gzip", compression_opts=9)
-
         try:
             f.create_dataset("data/angle", data=most_likely_orientations, compression="gzip", compression_opts=9)
         except:
@@ -756,9 +756,12 @@ while(currQuat <= op.maxQuat):
             print_to_log(msg)
             VR.make_error_time_plot(outFile)
 
+        print_to_log("Iteration number %d completed"%(iter_num))
         iter_num += 1
 
     currQuat += 1
+        
+print_to_log("All EMC iterations completed")
 
 ###############################################################
 # Plot the diagnostics of this run
