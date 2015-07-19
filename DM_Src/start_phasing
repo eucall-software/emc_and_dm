@@ -1,8 +1,8 @@
 #!/bin/bash
-SRC=/data/S2E/packages/s2e_recon/DM_Src
-TMP=/data/S2E/tmp
-INPUT=/data/S2E/data/sim_example
-OUTPUT=/data/S2E/data/sim_example
+SRC=/mnt/cbis/images/duaneloh/S2E/gold_example/s2e_recon/DM_Src
+TMP=/mnt/cbis/images/duaneloh/S2E/gold_example/phasing
+INPUT=/mnt/cbis/images/duaneloh/S2E/gold_example/tmp
+OUTPUT=/mnt/cbis/images/duaneloh/S2E/gold_example/tmp
 PWD=`pwd`
 
 NUMTRIALS=500

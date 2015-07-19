@@ -26,9 +26,7 @@ parser.add_option("-i", "--inDir", action="store", type="string", dest="inputDir
 parser.add_option("-s", "--srcDir", action="store", type="string", dest="srcDir", help="absolute path to source files for executables", metavar="", default=cwd)
 parser.add_option("-T", "--tmpOutDir", action="store", type="string", dest="tmpOutDir", help="temporary directory to store intermediate states of calculation", metavar="", default=cwd)
 parser.add_option("-o", "--outDir", action="store", type="string", dest="outDir", help="absolute path to output", metavar="", default=cwd)
-parser.add_option("-f", "--intensFile", action="store", type="string",
-dest="intensFile", help="file name of oriented 3D intensities", metavar="",
-default="orient_out*.h5")
+parser.add_option("-f", "--intensFile", action="store", type="string", dest="intensFile", help="file name of oriented 3D intensities", metavar="", default="orient_out*.h5")
 
 parser.add_option("-r", "--trials", action="store", type="int", dest="numTrials", help="", metavar="", default=500)
 parser.add_option("-a", "--start_ave", action="store", type="int", dest="startAve", help="", metavar="", default=15)
@@ -65,7 +63,7 @@ def create_directory(dir_name, logging=True, log_file=runLogFile, err_msg=""):
 
 def load_intensities(ref_file):
     fp      = h5py.File(ref_file, 'r')
-    t_intens = (fp["data/data"].value()).astype("float")
+    t_intens = (fp["data/data"].value).astype("float")
     fp.close()
     intens_len = len(t_intens)
     qmax    = intens_len/2
@@ -95,7 +93,11 @@ def find_two_means(vals, v0, v1):
         else:
             v0_t    += vv
             v0_t_n  += 1.
-    return (v0_t/v0_t_n, v1_t/v1_t_n)
+    if v0_t_n > 0.:
+        v0_t /= v0_t_n
+    if v1_t_n > 0.:
+        v1_t /= v1_t_n
+    return (v0_t, v1_t)
 
 def cluster_two_means(vals):
     (v0,v1)     = (0.,0.1)
@@ -108,6 +110,7 @@ def cluster_two_means(vals):
     return (v0, v1)
 
 def support_from_autocorr(auto, qmax, thr_0, thr_1, supp_file, kl=1, write=True):
+
     pos     = N.argwhere(N.abs(auto-thr_0) > N.abs(auto-thr_1))
     pos_set = set()
     pos_list= []
@@ -183,7 +186,8 @@ create_directory(runInstanceDir, err_msg=" Assuming that you are continuing a pr
 
 outputLog           = os.path.join(runInstanceDir, "phasing.log")
 supportFile         = os.path.join(runInstanceDir, "support.dat")
-inputIntensityFile  = glob.glob(os.path.join(op.inputDir, op.intensFIle))[0]
+inputIntensityFile  = glob.glob(os.path.join(op.inputDir, op.intensFile))[-1]
+print_to_log("Using input intensity file " + inputIntensityFile)
 intensityTmpFile    = os.path.join(runInstanceDir, "object_intensity.dat")
 outputFile          = os.path.join(op.outDir, "phase_out_" + op.timeStamp + ".h5")
 
@@ -193,27 +197,32 @@ input_intens = t_intens
 input_intens.tofile(intensityTmpFile, sep=" ")
 
 # Compute autocorrelation and support
-print "Computing autocorrelation..."
+print_to_log("Computing autocorrelation...")
 input_intens  = v_zero_neg(input_intens.ravel()).reshape(input_intens.shape)
 auto        = N.fft.fftshift(N.abs(N.fft.fftn(N.fft.ifftshift(input_intens))))
-print "Using 2-means clustering to determine significant voxels in autocorrelation..."
+print_to_log("Using 2-means clustering to determine significant voxels in autocorrelation...")
 (a_0, a_1)  = cluster_two_means(auto.ravel())
-print "Determining support from autocorrelation (will write to support.dat by default)..."
+print_to_log(a_0, a_1)
+print_to_log("Determining support from autocorrelation (will write to support.dat by default)...")
 support     = support_from_autocorr(auto, qmax, a_0, a_1, supportFile)
 
 #Start phasing
 #Store parameters into phase_out.h5.
 #Link executable from compiled version in srcDir to tmpDir
-os.chdir(op.tmpOutDir)
+os.chdir(runInstanceDir)
 inputOptions = (op.numTrials, op.numIter, op.startAve, op.leash, op.shrinkCycles)
-os.system("./object_recon %d %d %d %lf %d&"%inputOptions)
+if not os.path.isfile("object_recon"):
+    os.symlink(os.path.join(op.srcDir, "object_recon"), "object_recon")
+cmd = "./object_recon %d %d %d %lf %d"%inputOptions
+print_to_log("Running phasing command: " + cmd)
+os.system(cmd)
 
 min_objects     = glob.glob("finish_min_object*.dat")
 logFiles        = glob.glob("object*.log")
 shrinkWrapFile  = "shrinkwrap.log"
 fin_object      = "finish_object.dat"
 
-print "Done with reconstructions, now saving output from final shrink_cycle to h5 file"
+print_to_log("Done with reconstructions, now saving output from final shrink_cycle to h5 file")
 fp          = h5py.File(outputFile, "w")
 g_data      = fp.create_group("data")
 g_params    = fp.create_group("params")
