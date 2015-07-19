@@ -1,20 +1,21 @@
 #!/bin/bash
-SRC=/data/S2E/packages/s2e_recon/EMC_Src
-INPUT=/data/S2E/data/sim_example/diffr
-TMP=/data/S2E/tmp/orient
-OUTPUT=/data/S2E/data/sim_example
+
+SRC=/mnt/cbis/images/duaneloh/S2E/gold_example/s2e_recon/EMC_Src
+INPUT=/mnt/cbis/images/duaneloh/S2E/gold_example/diffr
+TMP=/mnt/cbis/images/duaneloh/S2E/gold_example/orient
+OUTPUT=/mnt/cbis/images/duaneloh/S2E/gold_example/tmp
 PWD=`pwd`
 
 INITIALQUAT=5
 MAXQUAT=9
 MAXITER=200
 MINERR="4.E-8"
-BEAMSTOP=1
+BEAMSTOP=0
 PLOT=1
 DETAILED=1
 
 SLEEPDUR=60
-NUMRECON=1
+NUMRECON=2
 #Compiles exectuables in the SRC directory; 
 #needed for runEMC.py script.
 cd ${SRC}
@@ -23,10 +24,23 @@ cd ${PWD}
 
 #Let's parse some options.
 OPTS="-s ${SRC} -T ${TMP} -i ${INPUT} -o ${OUTPUT} -q ${INITIALQUAT} -Q ${MAXQUAT} -m ${MAXITER} -e ${MINERR} "
+
 ADDOPT=" "
-[$BEAMSTOP -eq 1] && {ADDOPT="${ADDOPT} -b"} 
-[$PLOT -eq 1] && {ADDOPT="${ADDOPT} -p"} 
-[$DETAILED -eq 1] && {ADDOPT="${ADDOPT} -d"}
+if [ $BEAMSTOP -eq 1 ] 
+then
+	ADDOPT="${ADDOPT} -b" 
+fi
+
+if [ $PLOT -eq 1 ] 
+then
+	ADDOPT="${ADDOPT} -p"
+fi
+
+if [ $DETAILED -eq 1 ] 
+then
+	ADDOPT="${ADDOPT} -d"
+fi
+
 OPTS="${OPTS} ${ADDOPT}"
 
 #Starts multiple reconstructions 
@@ -35,6 +49,7 @@ do
     echo "Starting reconstruction ${i}."
     echo "Temporary output stored in ${TMP}."
     echo "Output stored in ${OUTPUT}."
+	echo nohup python runEMC.py ${OPTS} &
 	nohup python runEMC.py ${OPTS} &
 	sleep ${SLEEPDUR}
 done
