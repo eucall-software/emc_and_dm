@@ -846,7 +846,7 @@ int shrink_support(double ***in)
     diff_num_supp = new_num_supp - curr_num_supp ;
     curr_num_supp = new_num_supp ;
 	printf("Number and change in number of support voxels: %d\t%d\n", curr_num_supp, diff_num_supp) ;
-
+	FILE *fp ;
     fp = fopen("shrinkwrap.log", "a") ;
     fprintf(fp, "supp_vox = %d \n", new_num_supp) ;
     fclose(fp) ;
