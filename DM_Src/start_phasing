@@ -5,7 +5,7 @@ INPUT=/mnt/cbis/images/duaneloh/S2E/gold_example/tmp
 OUTPUT=/mnt/cbis/images/duaneloh/S2E/gold_example/tmp
 PWD=`pwd`
 
-NUMTRIALS=500
+NUMTRIALS=5
 STARTAVE=15
 NUMITER=50
 LEASH=0.2

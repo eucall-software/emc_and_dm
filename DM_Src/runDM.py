@@ -157,7 +157,7 @@ def parse_shrinkwrap_log(shrinkwrap_fn):
     for ll in lines:
         m = re.match("supp_vox = (\d+)\s", ll)
         if m:
-            (supp_size) = m.groups()
+            (supp_size,) = m.groups()
             lst.append(int(supp_size))
     return N.array(lst)
 
