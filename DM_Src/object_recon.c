@@ -112,32 +112,7 @@ int main(int argc, char* argv[])
     randomize_state() ;
     reset_support() ;
     reset_t_ave() ;
-    // Let the transient features decay away before finding support
-    //for (i = 1 ; i <= TRANSIENTS ; ++i)
-    //    error = diff(); 
-   /* 
-    t = 0 ;
-    leash = 0.1;
-    do  {
-        i = 0 ;
-        do  {
-            error = diff() ;
-            diff_t_ave = add_to_t_ave(fourierp) ;
-            ++ i ;
-            //printf("iter = %d    error = %lf\n", i, diff_t_ave) ;
-            //} while ((diff_t_ave > D_AVE)&&(i < MAX_SUPP_REFINE) || (i < TRANSIENTS) ); 
-            } while (i < MAX_SUPP_REFINE) ;
-        ++ t ;
-        fp = fopen("shrinkwrap.log", "a") ;
-        fprintf(fp, "cycle = %d      iter = %d    error = %f\n", t, i, diff_t_ave) ;
-        fclose(fp) ;
-        diff_support = shrink_support(t_ave) ;
-        reset_t_ave() ;
-        //} while (fabs((double) diff_support)/curr_num_supp > D_SUPP ) ;
-        } while(t < MAX_SUPP_REFINE_CYCLES) ;
-	*/
     // Reconstructions begin here
-    //leash = 0.2;
 	for (c = 1 ; c <= shrink_cycles ; ++c)
 		{
 		reset_gl_ave() ;

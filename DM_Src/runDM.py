@@ -202,7 +202,7 @@ input_intens  = v_zero_neg(input_intens.ravel()).reshape(input_intens.shape)
 auto        = N.fft.fftshift(N.abs(N.fft.fftn(N.fft.ifftshift(input_intens))))
 print_to_log("Using 2-means clustering to determine significant voxels in autocorrelation...")
 (a_0, a_1)  = cluster_two_means(auto.ravel())
-print_to_log(a_0, a_1)
+print_to_log("cluster averages: %lf %lf"%(a_0, a_1))
 print_to_log("Determining support from autocorrelation (will write to support.dat by default)...")
 support     = support_from_autocorr(auto, qmax, a_0, a_1, supportFile)
 
@@ -217,6 +217,7 @@ cmd = "./object_recon %d %d %d %lf %d"%inputOptions
 print_to_log("Running phasing command: " + cmd)
 os.system(cmd)
 
+#Phasing completed. Write output to single h5
 min_objects     = glob.glob("finish_min_object*.dat")
 logFiles        = glob.glob("object*.log")
 shrinkWrapFile  = "shrinkwrap.log"
@@ -237,7 +238,7 @@ for n, mo in enumerate(logFiles):
 for n, ob_fn in enumerate(min_objects):
     obj = extract_object(ob_fn)
     g_hist_obj.create_dataset("%0.4d"%(n+1), data=obj, compression="gzip")
-    os.remove(mo)
+    os.remove(ob_fn)
 
 finish_object = extract_object("finish_object.dat")
 g_data.create_dataset("electronDensity", data=finish_object, compression="gzip")
