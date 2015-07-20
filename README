@@ -77,9 +77,38 @@ Requirements:
 Quick start:
 Modify "start_phasing" to customize iterative phase retrieval.
 
+=====
+Use start_phasing to automatically start the phasing module in simS2E.
+Here's a summary of what start_phasing does
 ./start_phasing
-    - uses "compile_DM" to compile "object_recon.c" into executable
+    - uses "compile_DM" to compile object_recon.c into executable
       "object_recon"
     - uses "runDM.py" to start iterative phase retrieval.
         runDM.py
-            - creates a 
+            - computes a crude initial support based on 2-means clustering of the 
+			autocorrelation function 
+			- saves crude initial support to support.dat
+			- starts shrink_wrap + iterative phase retrieval using this support and other parameters (listed below)
+			- saves intermediate output to file
+
+======
+Quick start:
+Modify "start_phasing" to customize iterative phase retrieval. Here are some options, in brief
+
+The file directories should almost certainly be modified:
+	SRC: 	Location of source code for phasing (e.g. object_recon.c runDM.py)
+	INPUT:	Location of input 3D diffraction volume 
+	TMP:	Where intermediate phasing output should be stored
+	OUTPUT:	Where output should be stored simS2E
+
+Other options include:
+	NUMTRIALS:		number of random restarts for each support size
+	STARTAVE:		support averaging starts after these many iterations for
+					each randomly restarted reconstruction trial
+	LEASH:			leash parameter for the modified difference map
+	SHRINKCYCLES:	number of times to run the shrink_wrap support-shrinking algorithm
+	SLEEPDUR:		number of seconds to pause between reconstructions
+	NUMRECON:		number of independent phasing reconstructions to attempt
+
+For other options, compare the fields in start_phasing with the usage help from:
+	python runDM.py -h
