@@ -90,7 +90,7 @@ int main(int argc, char* argv[])
 		}
 	else
 		{
-		printf("expected three arguments:\n" 
+		printf("expected five arguments:\n"
         "\tnum_trials\n"
         "\tnum_iter\n"
         "\tstart_ave\n"
