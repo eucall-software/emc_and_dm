@@ -5,13 +5,14 @@ import time
 import sys
 import glob
 from optparse import OptionParser
-from mpl_toolkits.mplot3d import Axes3D
-import matplotlib.pyplot as plt
-import matplotlib.ticker as Tick
+
+# Matplotlib. We have to ensure that a non-interactive backend is used,
+# otherwise plotting will fail and the script abort.
+import matplotlib
+matplotlib.use("Agg")
+from  matplotlib import pyplot as plt
+
 from supp_py_modules import viewRecon as VR
-from supp_py_modules import read_results as read
-import matplotlib as M
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 ###############################################################
 # Argument parser for important input
@@ -760,7 +761,7 @@ while(currQuat <= op.maxQuat):
         iter_num += 1
 
     currQuat += 1
-        
+
 print_to_log("All EMC iterations completed")
 
 ###############################################################
